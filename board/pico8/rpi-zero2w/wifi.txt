@@ -1,0 +1,21 @@
+# Wi-Fi configuration for your PICO-8 console.
+#
+# Edit this file on any Mac or Windows machine: plug the SD card in and it
+# appears as a drive called PICO8BOOT. Save the file, eject, and boot.
+#
+# Remove the '#' from the three lines below and fill in your details.
+# This file is read at every boot.
+#
+#ssid=MyNetwork
+#psk=mypassword
+#country=SE
+#
+# country= is the two-letter code for where you are (SE, GB, US, DE ...).
+# Wi-Fi will not start without it -- the radio needs to know which channels
+# it is allowed to use.
+#
+# WPA2 networks are supported. WPA3 may work but is not guaranteed.
+#
+# Note: the password is stored here as plain text. Anyone holding the card
+# can read it. If that matters to you, put a full wpa_supplicant.conf on
+# this partition instead -- it takes priority over this file.

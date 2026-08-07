@@ -1,0 +1,136 @@
+#!/bin/sh
+#
+# Wi-Fi provisioning from the FAT boot partition (PRD 8.2).
+#
+# The user edits /boot/wifi.txt on any Mac or Windows machine:
+#
+#     ssid=MyNetwork
+#     psk=mypassword
+#     country=SE
+#
+# A full wpa_supplicant.conf on /boot takes priority, for people who need
+# something wifi.txt cannot express (EAP, hidden networks, multiple APs).
+#
+# Everything here runs in the background. Networking must never block the boot
+# path (PRD 8): PICO-8 comes up whether or not the network does.
+
+IFACE=wlan0
+WIFI_TXT=/boot/wifi.txt
+USER_CONF=/boot/wpa_supplicant.conf
+CONF=/run/wpa_supplicant.conf
+CTRL=/run/wpa_supplicant
+LOG=/tmp/wifi.log
+
+log() {
+	echo "wifi: $*" >> "$LOG" 2>/dev/null
+	echo "wifi: $*" > /dev/console 2>/dev/null
+}
+
+# Read one key from wifi.txt. Commented lines are ignored because the pattern
+# is anchored at the start; CR is stripped so a file saved on Windows works.
+get() {
+	sed -n "s/^[[:space:]]*$1=//p" "$WIFI_TXT" 2>/dev/null |
+		head -1 | tr -d '\r' | sed 's/[[:space:]]*$//'
+}
+
+build_conf() {
+	if [ -f "$USER_CONF" ]; then
+		log "using $USER_CONF"
+		cp "$USER_CONF" "$CONF" || return 1
+		return 0
+	fi
+
+	[ -f "$WIFI_TXT" ] || { log "no $WIFI_TXT and no $USER_CONF"; return 1; }
+
+	ssid=$(get ssid)
+	psk=$(get psk)
+	country=$(get country)
+
+	if [ -z "$ssid" ]; then
+		log "no ssid set in wifi.txt -- edit it on the PICO8BOOT volume"
+		return 1
+	fi
+
+	# Without a regulatory domain the radio will not transmit.
+	if [ -z "$country" ]; then
+		log "no country= in wifi.txt; Wi-Fi needs it to pick legal channels"
+		return 1
+	fi
+
+	{
+		echo "ctrl_interface=$CTRL"
+		echo "update_config=0"
+		echo "country=$country"
+		echo ""
+	} > "$CONF" || return 1
+
+	if [ -n "$psk" ]; then
+		# wpa_passphrase emits a network block with the PSK hashed, so the
+		# passphrase is not copied into the runtime config.
+		wpa_passphrase "$ssid" "$psk" 2>/dev/null |
+			grep -v '^[[:space:]]*#' >> "$CONF" || return 1
+	else
+		log "no psk set -- treating '$ssid' as an open network"
+		{
+			echo "network={"
+			echo "	ssid=\"$ssid\""
+			echo "	key_mgmt=NONE"
+			echo "}"
+		} >> "$CONF"
+	fi
+
+	chmod 0600 "$CONF"
+	log "configured for '$ssid' (country $country)"
+}
+
+connect() {
+	# The interface only appears once brcmfmac has loaded and pulled in its
+	# firmware, which is not instant on a cold boot.
+	i=0
+	while [ ! -d "/sys/class/net/$IFACE" ] && [ "$i" -lt 30 ]; do
+		sleep 1
+		i=$((i + 1))
+	done
+
+	if [ ! -d "/sys/class/net/$IFACE" ]; then
+		log "$IFACE never appeared (brcmfmac or firmware missing?)"
+		return 1
+	fi
+
+	mkdir -p "$CTRL"
+	build_conf || return 1
+
+	ip link set "$IFACE" up 2>/dev/null
+
+	wpa_supplicant -B -i "$IFACE" -c "$CONF" -D nl80211 >> "$LOG" 2>&1 || {
+		log "wpa_supplicant failed to start"
+		return 1
+	}
+
+	# -b so udhcpc backgrounds itself rather than blocking on a lease.
+	udhcpc -b -i "$IFACE" -x "hostname:$(hostname)" >> "$LOG" 2>&1 || {
+		log "dhcp failed on $IFACE"
+		return 1
+	}
+
+	log "up"
+}
+
+case "$1" in
+	start)
+		# Detached: boot continues immediately.
+		( connect & ) >/dev/null 2>&1
+		;;
+	stop)
+		killall udhcpc wpa_supplicant 2>/dev/null
+		;;
+	restart|reload)
+		"$0" stop
+		"$0" start
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+esac
+
+exit 0

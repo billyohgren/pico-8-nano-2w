@@ -1,0 +1,152 @@
+# Kernel config trim for the PICO-8 appliance.
+#
+# The stock bcm2709 defconfig builds essentially every driver in the tree as a
+# module -- 26 MB of them. This device does exactly one thing, so most of that
+# is dead weight.
+#
+# DELIBERATELY KEPT, do not add these to the disable list:
+#   CONFIG_DRM_VC4         vc4.ko -- the display. Nothing renders without it.
+#   CONFIG_BRCMFMAC        brcmfmac.ko -- the only network interface on a
+#                          Zero 2 W. There is no Ethernet to fall back to.
+#   CONFIG_SND_*           PICO-8 has sound.
+#   CONFIG_SQUASHFS        PRD 7 leaves squashfs open as a root fs option.
+#   CONFIG_MMC_*           the SD card.
+#   CONFIG_STAGING         Raspberry Pi keeps vchiq and friends in staging.
+#   CONFIG_WATCHDOG        used for clean reboot on this SoC.
+
+# Camera, video capture and DVB. ~4 MB, and this device has no camera.
+# CONFIG_MEDIA_SUPPORT is not set
+
+# No firewall on a single-purpose appliance behind a home router. ~2 MB.
+# CONFIG_NETFILTER is not set
+
+# Exotic network protocols. Amateur radio, ATM, SCTP and traffic shaping are
+# not plausible on a games console.
+# CONFIG_HAMRADIO is not set
+# CONFIG_ATM is not set
+# CONFIG_IP_SCTP is not set
+# CONFIG_NET_SCHED is not set
+# CONFIG_L2TP is not set
+# CONFIG_MPLS is not set
+# CONFIG_6LOWPAN is not set
+# CONFIG_IEEE802154 is not set
+# CONFIG_CAN is not set
+# CONFIG_NFC is not set
+
+# Filesystems we will never mount. The card is FAT + ext4, and squashfs stays.
+# CONFIG_BCACHEFS_FS is not set
+# CONFIG_BTRFS_FS is not set
+# CONFIG_XFS_FS is not set
+# CONFIG_JFS_FS is not set
+# CONFIG_NILFS2_FS is not set
+# CONFIG_F2FS_FS is not set
+# CONFIG_GFS2_FS is not set
+# CONFIG_OCFS2_FS is not set
+# CONFIG_UDF_FS is not set
+# CONFIG_UBIFS_FS is not set
+# CONFIG_NTFS3_FS is not set
+# CONFIG_CIFS is not set
+# CONFIG_SMB_SERVER is not set
+# CONFIG_NFS_FS is not set
+# CONFIG_NFSD is not set
+# CONFIG_CEPH_FS is not set
+# CONFIG_9P_FS is not set
+
+# Wireless from every vendor except Broadcom. The radio is soldered on; no
+# other chip can ever appear.
+# CONFIG_WLAN_VENDOR_ADMTEK is not set
+# CONFIG_WLAN_VENDOR_ATH is not set
+# CONFIG_WLAN_VENDOR_ATMEL is not set
+# CONFIG_WLAN_VENDOR_INTEL is not set
+# CONFIG_WLAN_VENDOR_INTERSIL is not set
+# CONFIG_WLAN_VENDOR_MARVELL is not set
+# CONFIG_WLAN_VENDOR_MEDIATEK is not set
+# CONFIG_WLAN_VENDOR_MICROCHIP is not set
+# CONFIG_WLAN_VENDOR_PURELIFI is not set
+# CONFIG_WLAN_VENDOR_RALINK is not set
+# CONFIG_WLAN_VENDOR_REALTEK is not set
+# CONFIG_WLAN_VENDOR_RSI is not set
+# CONFIG_WLAN_VENDOR_SILABS is not set
+# CONFIG_WLAN_VENDOR_ST is not set
+# CONFIG_WLAN_VENDOR_TI is not set
+# CONFIG_WLAN_VENDOR_ZYDAS is not set
+
+# Miscellaneous subsystems with no hardware behind them here.
+# CONFIG_INFINIBAND is not set
+# CONFIG_W1 is not set
+# CONFIG_SSB is not set
+# CONFIG_MTD is not set
+# CONFIG_RAID6_PQ is not set
+# CONFIG_MD is not set
+
+# --- squashfs root (PRD 7 permits ext4 or squashfs for p2) ---
+# Must be built in, not a module: there is no initramfs, so the kernel has to
+# mount the root filesystem before it can load anything from it.
+CONFIG_SQUASHFS=y
+CONFIG_SQUASHFS_XZ=y
+CONFIG_SQUASHFS_ZLIB=y
+
+# Do NOT compress modules individually. Per-file .ko.xz cannot be compressed
+# again by squashfs, so 13 MB of modules stayed 13 MB in the image. Storing
+# them raw lets squashfs compress the whole lot in one pass, which does far
+# better across many similar files.
+# This kernel has no MODULE_COMPRESS_NONE: compression is a bool plus an
+# algorithm choice, so the bool is what has to go.
+# CONFIG_MODULE_COMPRESS is not set
+# CONFIG_MODULE_COMPRESS_ALL is not set
+
+# --- final size trim ---
+# brcmfmac is a FullMAC device: the firmware runs the 802.11 state machine, so
+# it binds to cfg80211 directly and never needs the mac80211 softMAC stack.
+# CONFIG_MAC80211 is not set
+
+# Distributed replicated block device. On a games console.
+# CONFIG_BLK_DEV_DRBD is not set
+
+# Codecs for Raspberry Pi audio HATs that this device does not have. HDMI and
+# headphone audio go through vc4/bcm2835, which are untouched.
+# CONFIG_SND_SOC_WM5102 is not set
+# CONFIG_SND_SOC_WM8804 is not set
+# CONFIG_SND_SOC_ADAU1701 is not set
+# CONFIG_SND_SOC_CS4265 is not set
+# CONFIG_SND_SOC_TAS5713 is not set
+# CONFIG_SND_SOC_PCM512x is not set
+# CONFIG_SND_SOC_PCM186X is not set
+# CONFIG_SND_SOC_TLV320AIC32X4 is not set
+
+# Machine drivers for Raspberry Pi audio HATs -- HiFiBerry, IQaudIO,
+# JustBoom, Allo, Cirrus and friends. None of these boards exist on a
+# bare Zero 2 W. Analog audio (SND_BCM2835) and HDMI audio through vc4
+# are untouched.
+# CONFIG_SND_BCM2708_SOC_CHIPDIP_DAC is not set
+# CONFIG_SND_BCM2708_SOC_GOOGLEVOICEHAT_SOUNDCARD is not set
+# CONFIG_SND_BCM2708_SOC_HIFIBERRY_ADC is not set
+# CONFIG_SND_BCM2708_SOC_HIFIBERRY_DAC is not set
+# CONFIG_SND_BCM2708_SOC_HIFIBERRY_DACPLUS is not set
+# CONFIG_SND_BCM2708_SOC_HIFIBERRY_DACPLUSHD is not set
+# CONFIG_SND_BCM2708_SOC_HIFIBERRY_DACPLUSADC is not set
+# CONFIG_SND_BCM2708_SOC_HIFIBERRY_DACPLUSADCPRO is not set
+# CONFIG_SND_BCM2708_SOC_HIFIBERRY_DACPLUSDSP is not set
+# CONFIG_SND_BCM2708_SOC_HIFIBERRY_DIGI is not set
+# CONFIG_SND_BCM2708_SOC_HIFIBERRY_AMP is not set
+# CONFIG_SND_BCM2708_SOC_PIFI_40 is not set
+# CONFIG_SND_BCM2708_SOC_RPI_CIRRUS is not set
+# CONFIG_SND_BCM2708_SOC_RPI_DAC is not set
+# CONFIG_SND_BCM2708_SOC_RPI_PROTO is not set
+# CONFIG_SND_BCM2708_SOC_JUSTBOOM_BOTH is not set
+# CONFIG_SND_BCM2708_SOC_JUSTBOOM_DAC is not set
+# CONFIG_SND_BCM2708_SOC_JUSTBOOM_DIGI is not set
+# CONFIG_SND_BCM2708_SOC_IQAUDIO_CODEC is not set
+# CONFIG_SND_BCM2708_SOC_IQAUDIO_DAC is not set
+# CONFIG_SND_BCM2708_SOC_IQAUDIO_DIGI is not set
+# CONFIG_SND_BCM2708_SOC_I_SABRE_Q2M is not set
+# CONFIG_SND_BCM2708_SOC_ADAU1977_ADC is not set
+# CONFIG_SND_BCM2708_SOC_DIONAUDIO_LOCO is not set
+# CONFIG_SND_BCM2708_SOC_DIONAUDIO_LOCO_V2 is not set
+# CONFIG_SND_BCM2708_SOC_ALLO_PIANO_DAC is not set
+# CONFIG_SND_BCM2708_SOC_ALLO_PIANO_DAC_PLUS is not set
+# CONFIG_SND_BCM2708_SOC_ALLO_BOSS_DAC is not set
+# CONFIG_SND_BCM2708_SOC_ALLO_BOSS2_DAC is not set
+# CONFIG_SND_BCM2708_SOC_ALLO_DIGIONE is not set
+# CONFIG_SND_BCM2708_SOC_ALLO_KATANA_DAC is not set
+# CONFIG_SND_BCM2708_SOC_FE_PI_AUDIO is not set

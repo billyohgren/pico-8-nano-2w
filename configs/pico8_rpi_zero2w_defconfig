@@ -1,0 +1,116 @@
+# PICO-8 image for the Raspberry Pi Zero 2 W.
+#
+# Derived from upstream's raspberrypizero2w_defconfig; everything below that
+# is not in upstream is here for a reason recorded in the PRD, and cites it.
+
+# Architecture: 32-bit armhf (PRD 5.2)
+BR2_arm=y
+BR2_cortex_a53=y
+BR2_ARM_FPU_NEON_VFPV4=y
+
+# glibc is mandatory -- a prebuilt Lexaloffle binary will not run on
+# uClibc-ng or musl (PRD 5.3). The Bootlin external toolchain is glibc based
+# and selects BR2_INSTALL_LIBSTDCPP, which PICO-8 and SDL2 both need.
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_ARMV7_EABIHF_GLIBC_STABLE=y
+
+# Relative to the Buildroot tree, not this external tree.
+BR2_GLOBAL_PATCH_DIR="board/raspberrypi/patches"
+BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
+
+# vc4 and brcmfmac are modules, so something must handle uevents and load
+# them. BusyBox mdev is already in the image and its default rules modprobe
+# on $MODALIAS; eudev would add megabytes and a hwdb we do not need.
+BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_MDEV=y
+
+BR2_TARGET_GENERIC_HOSTNAME="pico8"
+BR2_TARGET_GENERIC_ISSUE=""
+# Nothing on this device reads a locale.
+BR2_ENABLE_LOCALE_PURGE=y
+# No getty on any tty; the user must never land on a console (PRD 5.5).
+BR2_TARGET_GENERIC_GETTY_PORT=""
+
+BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_PICO8_PATH)/overlay"
+BR2_ROOTFS_POST_BUILD_SCRIPT="$(BR2_EXTERNAL_PICO8_PATH)/board/pico8/rpi-zero2w/post-build.sh"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL_PICO8_PATH)/board/pico8/rpi-zero2w/post-image.sh"
+
+# Kernel: same pin as upstream's raspberrypizero2w_defconfig.
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="$(call github,raspberrypi,linux,21b410140c47ffab5668399f6f143c7d7b935c8b)/linux-21b410140c47ffab5668399f6f143c7d7b935c8b.tar.gz"
+BR2_LINUX_KERNEL_DEFCONFIG="bcm2709"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="broadcom/bcm2710-rpi-zero-2-w"
+BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
+# Trims ~20 MB of unused modules from the stock bcm2709 defconfig.
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL_PICO8_PATH)/board/pico8/rpi-zero2w/linux.fragment"
+
+# Raspberry Pi firmware. DTB overlays are needed for vc4-kms-v3d and
+# miniuart-bt, both referenced by our config.txt.
+BR2_PACKAGE_RPI_FIRMWARE=y
+BR2_PACKAGE_RPI_FIRMWARE_BOOTCODE_BIN=y
+BR2_PACKAGE_RPI_FIRMWARE_VARIANT_PI=y
+BR2_PACKAGE_RPI_FIRMWARE_INSTALL_DTB_OVERLAYS=y
+BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE="$(BR2_EXTERNAL_PICO8_PATH)/board/pico8/rpi-zero2w/config.txt"
+BR2_PACKAGE_KMOD=y
+BR2_PACKAGE_KMOD_TOOLS=y
+
+# Display: SDL2 on KMS/DRM, no X11 and no Wayland (PRD 5.4).
+BR2_PACKAGE_MESA3D=y
+BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_VC4=y
+BR2_PACKAGE_MESA3D_GBM=y
+BR2_PACKAGE_MESA3D_OPENGL_EGL=y
+BR2_PACKAGE_MESA3D_OPENGL_ES=y
+BR2_PACKAGE_SDL2=y
+BR2_PACKAGE_SDL2_KMSDRM=y
+BR2_PACKAGE_SDL2_OPENGLES=y
+# BR2_PACKAGE_SDL2_X11 is not set
+# BR2_PACKAGE_SDL2_WAYLAND is not set
+
+# PICO-8 is NOT built into this image. The user drags their own pico-8
+# folder onto the FAT boot partition after flashing, so the image contains
+# no proprietary code and can be redistributed freely.
+# This overrides PRD 10 and 5.1 by explicit decision.
+
+# Audio
+BR2_PACKAGE_ALSA_UTILS=y
+BR2_PACKAGE_ALSA_UTILS_AMIXER=y
+
+# Wireless. The Zero 2 W has no Ethernet, so this is the only way in.
+# Chips are BCM43436 (wifi) and BCM43430B0 (bluetooth).
+BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI=y
+BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI_WIFI=y
+BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI_BT=y
+BR2_PACKAGE_WPA_SUPPLICANT=y
+BR2_PACKAGE_WPA_SUPPLICANT_NL80211=y
+BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
+BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
+
+# OpenSSH rather than Dropbear (PRD 5.6).
+BR2_PACKAGE_OPENSSH=y
+
+# splore needs CA certificates and a correct clock (PRD 10, 12).
+BR2_PACKAGE_CA_CERTIFICATES=y
+
+# Filesystem (PRD 7): read-only root on p2, writable /data on p3.
+# p3 is created empty by genimage and resized on first boot.
+# 90M against 69M measured usage -- enough headroom for the overlay work
+# still to come, without shipping empty blocks.
+# squashfs, xz, 1 MB blocks. The root is read-only by design, so a
+# genuinely read-only compressed filesystem costs nothing and the image
+# carries no empty space at all.
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+BR2_TARGET_ROOTFS_SQUASHFS_BS_1024K=y
+BR2_TARGET_ROOTFS_SQUASHFS_EXTREME_COMP=y
+# BCJ filter for ARM: reworks branch targets so xz finds more redundancy in
+# executable code. A few percent, for free.
+BR2_TARGET_ROOTFS_SQUASHFS_COMP_OPTS="-Xbcj arm"
+# BR2_TARGET_ROOTFS_TAR is not set
+
+# Host tools for image generation
+BR2_PACKAGE_HOST_DOSFSTOOLS=y
+BR2_PACKAGE_HOST_GENIMAGE=y
+BR2_PACKAGE_HOST_KMOD_XZ=y
+BR2_PACKAGE_HOST_MTOOLS=y

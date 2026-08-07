@@ -1,0 +1,19 @@
+# PRD 7: p1 and p2 are read-only, p3 is the only writable partition.
+#
+# /boot is mounted exec because the user-supplied PICO-8 binary lives there
+# and is executed in place. umask=0022 gives it the executable bit -- FAT has
+# no permission bits of its own.
+
+/dev/root       /               squashfs ro,noatime            0 0
+/dev/mmcblk0p1  /boot           vfat    ro,exec,umask=0022,noatime  0 0
+
+# Journaled, and committed often: the device has no shutdown button and users
+# will pull the power mid-game.
+/dev/mmcblk0p3  /data           ext4    rw,noatime,commit=5     0 2
+
+proc            /proc           proc    defaults                0 0
+devpts          /dev/pts        devpts  defaults,gid=5,mode=620 0 0
+tmpfs           /dev/shm        tmpfs   mode=0777               0 0
+tmpfs           /tmp            tmpfs   mode=1777               0 0
+tmpfs           /run            tmpfs   mode=0755,nosuid,nodev  0 0
+sysfs           /sys            sysfs   defaults                0 0

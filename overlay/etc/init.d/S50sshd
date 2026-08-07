@@ -1,0 +1,59 @@
+#!/bin/sh
+#
+# OpenSSH on a read-only root (PRD 5.6, 7, 9).
+#
+# This replaces the stock Buildroot script, which runs `ssh-keygen -A` and
+# writes host keys into /etc/ssh. That is squashfs here, so the write fails
+# and sshd never starts. Host keys and authorized_keys live on /data instead,
+# and sshd is told where to find them; the config in /etc stays immutable,
+# which is the point of a read-only root.
+
+KEYDIR=/data/ssh
+AUTH="$KEYDIR/authorized_keys"
+BOOT_AUTH=/boot/authorized_keys
+
+start() {
+	printf 'Starting sshd: '
+
+	mkdir -p "$KEYDIR" || { echo "FAIL (no /data)"; return 1; }
+	chmod 0700 "$KEYDIR"
+
+	# Generated once, on first boot, then kept. Regenerating every boot would
+	# change the host fingerprint and trip SSH's warning each time.
+	for t in rsa ecdsa ed25519; do
+		f="$KEYDIR/ssh_host_${t}_key"
+		if [ ! -f "$f" ]; then
+			ssh-keygen -q -t "$t" -N "" -f "$f" 2>/dev/null || {
+				echo "FAIL (keygen $t)"
+				return 1
+			}
+		fi
+	done
+
+	# The user drops their public key onto the FAT partition, which is the
+	# only one they can mount on a Mac or Windows machine (PRD 7).
+	if [ -f "$BOOT_AUTH" ]; then
+		cp "$BOOT_AUTH" "$AUTH" 2>/dev/null && chmod 0600 "$AUTH"
+	fi
+
+	/usr/sbin/sshd \
+		-h "$KEYDIR/ssh_host_rsa_key" \
+		-h "$KEYDIR/ssh_host_ecdsa_key" \
+		-h "$KEYDIR/ssh_host_ed25519_key" \
+		-o "AuthorizedKeysFile=$AUTH" \
+		-o "PermitRootLogin=prohibit-password" \
+		&& echo "OK" || { echo "FAIL"; return 1; }
+}
+
+stop() {
+	printf 'Stopping sshd: '
+	killall sshd 2>/dev/null
+	echo "OK"
+}
+
+case "$1" in
+	start) start ;;
+	stop)  stop ;;
+	restart|reload) stop; start ;;
+	*) echo "Usage: $0 {start|stop|restart}"; exit 1
+esac

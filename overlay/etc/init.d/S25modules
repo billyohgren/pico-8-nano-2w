@@ -1,0 +1,29 @@
+#!/bin/sh
+#
+# Load the modules this board always needs.
+#
+# mdev's coldplug pass should load these from $MODALIAS anyway, but the two
+# that matter -- the display and the only network interface -- are not worth
+# leaving to chance. modprobe of an already-loaded module is a no-op, so this
+# is pure insurance.
+
+case "$1" in
+	start)
+		# Display. SDL2's KMSDRM backend needs /dev/dri to exist before
+		# PICO-8 starts, so this must happen before the supervisor.
+		modprobe vc4 2>/dev/null
+
+		# Wi-Fi. The Zero 2 W has no Ethernet.
+		modprobe brcmfmac 2>/dev/null
+
+		# Analog and HDMI audio.
+		modprobe snd_bcm2835 2>/dev/null
+		;;
+	stop|restart|reload)
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+esac
+
+exit 0

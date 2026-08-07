@@ -1,0 +1,40 @@
+# Docker build environment. Drive it with ./scripts/br — you should not need
+# to run docker compose by hand.
+#
+# The critical detail is the volume split:
+#
+#   .        -> /src     bind mount (macOS APFS)  — your editable files only
+#   br-output-> /build   named volume (ext4)      — everything Buildroot extracts
+#   br-dl    -> /dl      named volume (ext4)      — download cache
+#
+# Buildroot is invoked with O=/build, so it never extracts anything onto the
+# macOS filesystem. See docs/build-environment.md.
+
+services:
+  buildroot:
+    build:
+      context: ./docker
+      args:
+        UID: "1000"
+        GID: "1000"
+    image: pico-rpi-buildroot:latest
+    platform: linux/arm64
+    init: true
+    stdin_open: true
+    tty: true
+    working_dir: /src
+    environment:
+      BR2_DL_DIR: /dl
+      BR2_CCACHE_DIR: /ccache
+      # Buildroot picks this up for parallel package builds.
+      BR2_JLEVEL: "0"
+    volumes:
+      - .:/src
+      - br-output:/build
+      - br-dl:/dl
+      - br-ccache:/ccache
+
+volumes:
+  br-output:
+  br-dl:
+  br-ccache:

@@ -1,0 +1,83 @@
+#!/bin/sh
+# Drive the Buildroot build inside Docker. Run this from macOS.
+#
+#   ./scripts/br setup       one-time: fetch Buildroot, build the container image
+#   ./scripts/br defconfig   apply configs/pico8_rpi_zero2w_defconfig
+#   ./scripts/br build       build the image (hours on a first run)
+#   ./scripts/br image       copy sdcard.img out to ./output/ on the Mac
+#   ./scripts/br menuconfig  interactive Buildroot config
+#   ./scripts/br savedefconfig  write config changes back to the defconfig
+#   ./scripts/br shell       a shell in the build container
+#   ./scripts/br make <args> any raw Buildroot make target
+#   ./scripts/br clean       remove build output, keep the download cache
+#   ./scripts/br nuke        remove build output AND the download cache
+#
+# Everything Buildroot extracts lives in a Docker named volume, never on the
+# macOS filesystem. See docs/build-environment.md for why that matters.
+
+set -eu
+
+DEFCONFIG=pico8_rpi_zero2w_defconfig
+COMPOSE="docker compose"
+RUN="$COMPOSE run --rm buildroot"
+
+die() { echo "error: $*" >&2; exit 1; }
+
+# Buildroot writes a Makefile wrapper into the output dir on first configure,
+# which remembers O= and BR2_EXTERNAL. Before that exists we must pass them.
+br_make() {
+    if $RUN sh -c 'test -f /build/Makefile'; then
+        $RUN make -C /build "$@"
+    else
+        $RUN make -C /src/buildroot O=/build BR2_EXTERNAL=/src "$@"
+    fi
+}
+
+cmd_setup() {
+    if [ ! -f buildroot/Makefile ]; then
+        if [ -d .git ]; then
+            echo "==> fetching pinned Buildroot submodule"
+            git submodule update --init --recursive
+        else
+            die "buildroot/ is missing and this is not a git checkout.
+     Run 'git init' and add Buildroot as a pinned submodule:
+       git submodule add https://gitlab.com/buildroot.org/buildroot.git buildroot
+       git -C buildroot checkout <tag>"
+        fi
+    fi
+    echo "==> building the container image"
+    $COMPOSE build
+    echo "==> ready. Next: ./scripts/br defconfig && ./scripts/br build"
+}
+
+cmd_check() {
+    [ -f buildroot/Makefile ] || die "buildroot/ not present — run './scripts/br setup' first"
+    # PICO-8 is NOT built into the image. It is dropped onto the FAT partition
+    # by the user after flashing, so the build needs nothing from them and the
+    # resulting image contains no proprietary code.
+}
+
+case "${1:-}" in
+    setup)        cmd_setup ;;
+    defconfig)    cmd_check; br_make "$DEFCONFIG" ;;
+    build)        cmd_check; br_make ;;
+    menuconfig)   cmd_check; br_make menuconfig ;;
+    savedefconfig) br_make savedefconfig ;;
+    legal-info)   br_make legal-info ;;
+    image)
+        mkdir -p output
+        $RUN sh -c 'test -f /build/images/sdcard.img' \
+            || die "no image built yet — run './scripts/br build'"
+        $RUN cp /build/images/sdcard.img /src/output/sdcard.img
+        echo "==> output/sdcard.img — flash with Raspberry Pi Imager"
+        ;;
+    shell)        $RUN bash ;;
+    make)         shift; br_make "$@" ;;
+    clean)        $RUN sh -c 'rm -rf /build/*' ; echo "==> build output cleared (downloads kept)" ;;
+    nuke)         $COMPOSE down -v ; echo "==> build output and download cache removed" ;;
+    ""|-h|--help|help)
+        # Print the header comment block, stopping at the first non-comment line.
+        awk 'NR>1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$0"
+        ;;
+    *)            die "unknown command '$1' — try './scripts/br help'" ;;
+esac

@@ -1,0 +1,19 @@
+# PICO-8 is proprietary and must never be committed. Each builder supplies
+# their own archive from their Lexaloffle account. See docs/licensing.md.
+vendor/pico-8/*
+!vendor/pico-8/.gitkeep
+!vendor/pico-8/README.md
+
+# Build artefacts copied out of the Docker volume
+output/*
+!output/.gitkeep
+
+# Buildroot output never lands here (it lives in a Docker volume), but guard
+# against an accidental in-tree build.
+/build/
+buildroot/output/
+
+.DS_Store
+
+# Editor/plugin scratch
+.mint/

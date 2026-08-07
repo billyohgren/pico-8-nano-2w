@@ -1,0 +1,29 @@
+# Raspberry Pi firmware configuration for the PICO-8 Zero 2 W image.
+# Installed to the FAT boot partition via BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE.
+
+start_file=start.elf
+fixup_file=fixup.dat
+
+kernel=zImage
+
+# Full KMS. PICO-8 is an SDL2 application and we run it on the KMSDRM
+# backend (PRD 5.4), which needs the vc4 DRM driver rather than the legacy
+# dispmanx/fbdev path. cma-128 reserves enough contiguous memory for the
+# display pipeline on a 512 MB board.
+dtoverlay=vc4-kms-v3d,cma-128
+
+# With full KMS the firmware itself needs very little memory; the GPU
+# allocation that mattered on the legacy stack does not apply here.
+gpu_mem=64
+
+# Move Bluetooth off the PL011 so ttyAMA0 is a usable console. On this SoC
+# the overlay is called miniuart-bt -- pi3-miniuart-bt no longer exists.
+dtoverlay=miniuart-bt
+enable_uart=1
+
+# Audio out (PRD 10)
+dtparam=audio=on
+
+# Nothing on screen before PICO-8 (PRD 5.5, 11)
+disable_splash=1
+disable_overscan=1

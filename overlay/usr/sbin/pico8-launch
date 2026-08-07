@@ -1,0 +1,67 @@
+#!/bin/sh
+#
+# Find the user-supplied PICO-8 on the boot partition and run it.
+#
+# PICO-8 is not part of this image -- it is proprietary and cannot be
+# redistributed. The user drags their own pico-8 folder onto the FAT
+# partition, which is the one volume that shows up on a Mac or Windows
+# machine when the card is plugged in.
+#
+# Any version works: we look for the known binary names rather than a
+# pinned version, so dropping in a newer pico-8 folder just works.
+
+set -u
+
+BOOT=/boot
+DATA=/data
+PICO_HOME="${DATA}/pico-8"
+
+log() { echo "pico8-launch: $*" >&2; }
+
+# The folder may be called pico-8 (as shipped in Lexaloffle's zip) or pico8.
+PICO_DIR=""
+for d in "${BOOT}/pico-8" "${BOOT}/pico8" "${DATA}/pico-8"; do
+	[ -d "$d" ] && { PICO_DIR="$d"; break; }
+done
+
+if [ -z "${PICO_DIR}" ]; then
+	log "no PICO-8 found on the boot partition."
+	log "Plug the card into a computer, open the PICO8BOOT volume and copy"
+	log "the 'pico-8' folder from your Lexaloffle raspi zip onto it."
+	exit 1
+fi
+
+# pico8_dyn links against the system SDL2, which is the one we build with the
+# KMSDRM backend. Prefer it. pico8 has its own SDL2 statically linked and is a
+# usable fallback. pico8_64 is aarch64 and cannot run on this 32-bit userland.
+BIN=""
+for b in pico8_dyn pico8; do
+	[ -x "${PICO_DIR}/${b}" ] || [ -f "${PICO_DIR}/${b}" ] || continue
+	BIN="${PICO_DIR}/${b}"
+	break
+done
+
+if [ -z "${BIN}" ]; then
+	if [ -f "${PICO_DIR}/pico8_64" ]; then
+		log "found only pico8_64, which is 64-bit. This image runs a 32-bit"
+		log "userland -- you need pico8_dyn from the same zip."
+	else
+		log "${PICO_DIR} contains no PICO-8 binary (looked for pico8_dyn, pico8)."
+	fi
+	exit 1
+fi
+
+# Saves, carts and config must land on the writable ext4 partition, never on
+# FAT: PICO-8 writes during play (cstore, cdata) and a power cut mid-write to
+# the boot partition is what bricks the device (PRD 7.1).
+mkdir -p "${PICO_HOME}"
+
+# SDL2 has exactly two backends in this image: kmsdrm and dummy.
+export SDL_VIDEODRIVER=kmsdrm
+export HOME="${DATA}"
+
+# Peripherals (controllers) need a moment to enumerate before PICO-8 scans.
+sleep 1
+
+log "starting ${BIN}"
+exec "${BIN}" -home "${PICO_HOME}" -root_path "${PICO_HOME}/carts"
