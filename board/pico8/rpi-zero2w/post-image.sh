@@ -2,9 +2,10 @@
 #
 # Assemble the three-partition SD card image (PRD 7).
 #
-# Modelled on upstream's board/raspberrypi/post-image.sh: the boot file list is
-# generated from whatever the firmware package actually installed, rather than
-# hard-coded, so a firmware bump cannot silently drop a file from the image.
+# Derived from Buildroot's board/raspberrypi/post-image.sh (GPL-2.0-or-later):
+# the genimage invocation and the generated boot-file list come from there. The
+# list is built from whatever the firmware package actually installed rather
+# than hard-coded, so a firmware bump cannot silently drop a file.
 
 set -e
 
