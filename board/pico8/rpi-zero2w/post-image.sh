@@ -14,8 +14,12 @@ BOARD_DIR="$(dirname "$0")"
 GENIMAGE_CFG="${BINARIES_DIR}/genimage.cfg"
 GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
 
-# cmdline.txt is ours, not the firmware package's.
+# cmdline.txt and config.txt are ours. The firmware package also installs a
+# config.txt (BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE) but only when that
+# package is rebuilt, so a later edit of the board file would not land
+# on the card. Always overwrite at image time.
 cp "${BOARD_DIR}/cmdline.txt" "${BINARIES_DIR}/rpi-firmware/cmdline.txt"
+cp "${BOARD_DIR}/config.txt" "${BINARIES_DIR}/rpi-firmware/config.txt"
 
 # The FAT partition is the one volume a non-technical user can mount on a Mac
 # or Windows machine, so the user-serviceable files live there (PRD 7, 7.1).
