@@ -9,7 +9,8 @@
 #   CONFIG_BRCMFMAC        brcmfmac.ko -- the only network interface on a
 #                          Zero 2 W. There is no Ethernet to fall back to.
 #   CONFIG_SND_*           PICO-8 has sound.
-#   CONFIG_SQUASHFS        PRD 7 leaves squashfs open as a root fs option.
+#   CONFIG_BLK_DEV_INITRD  the OS is an initramfs; without this the firmware
+#                          loads rootfs.cpio.gz and the kernel ignores it.
 #   CONFIG_MMC_*           the SD card.
 #   CONFIG_STAGING         Raspberry Pi keeps vchiq and friends in staging.
 #   CONFIG_WATCHDOG        used for clean reboot on this SoC.
@@ -33,7 +34,7 @@
 # CONFIG_CAN is not set
 # CONFIG_NFC is not set
 
-# Filesystems we will never mount. The card is FAT + ext4, and squashfs stays.
+# Filesystems we will never mount. The card is one FAT32 volume; the OS is a ramdisk.
 # CONFIG_BCACHEFS_FS is not set
 # CONFIG_BTRFS_FS is not set
 # CONFIG_XFS_FS is not set
@@ -79,17 +80,18 @@
 # CONFIG_RAID6_PQ is not set
 # CONFIG_MD is not set
 
-# --- squashfs root (PRD 7 permits ext4 or squashfs for p2) ---
-# Must be built in, not a module: there is no initramfs, so the kernel has to
-# mount the root filesystem before it can load anything from it.
-CONFIG_SQUASHFS=y
-CONFIG_SQUASHFS_XZ=y
-CONFIG_SQUASHFS_ZLIB=y
+# --- initramfs root ---
+# The firmware loads rootfs.cpio.gz (gzip) next to the kernel. These must be
+# built in: there is no on-disk root to load a module from.
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+# CONFIG_SQUASHFS is not set
 
-# Do NOT compress modules individually. Per-file .ko.xz cannot be compressed
-# again by squashfs, so 13 MB of modules stayed 13 MB in the image. Storing
-# them raw lets squashfs compress the whole lot in one pass, which does far
-# better across many similar files.
+# Do NOT compress modules individually. Per-file .ko.xz is already compressed,
+# so gzip of the initramfs cannot squeeze them again. Raw .ko files compress
+# together as one archive, which does far better across many similar files.
 # This kernel has no MODULE_COMPRESS_NONE: compression is a bool plus an
 # algorithm choice, so the bool is what has to go.
 # CONFIG_MODULE_COMPRESS is not set

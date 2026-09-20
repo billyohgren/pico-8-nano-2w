@@ -173,12 +173,12 @@ viable base. Upstream Buildroot already provides `configs/raspberrypizero2w_defc
 
 ```
 Power on
-  → Pi bootloader (bootcode.bin / start.elf, from FAT boot partition)
-  → Linux kernel + bcm2710-rpi-zero-2-w.dtb
+  → Pi bootloader (bootcode.bin / start_cd.elf, from FAT boot partition)
+  → Linux kernel + initramfs (OS in RAM) + bcm2710-rpi-zero-2-w.dtb
   → BusyBox init
-      ├─ mount /data (rw), overlay writable paths
-      ├─ start PICO-8 supervisor          ← foreground, blocks nothing
-      └─ start network + sshd             ← background, never blocks boot
+      ├─ mount /boot (rw, the only partition)
+      ├─ start PICO-8 supervisor          ← first, not behind rcS
+      └─ start network + sshd             ← once, never blocks PICO-8
   → DRM/KMS mode set
   → PICO-8 fullscreen
 ```
@@ -197,16 +197,20 @@ root filesystem, which corrupts SD cards under those conditions. Corrected layou
 
 | Partition | Format | Mount | Mode | Contents |
 |-----------|--------|-------|------|----------|
-| p1 | FAT32 | `/boot` | **read-only** | firmware, kernel, dtb, `config.txt`, `cmdline.txt`, `wifi.txt`, `pico8.txt`, `authorized_keys`, `carts/` (drop-box, see §7.1) |
-| p2 | ext4 or squashfs | `/` | **read-only** | base system, PICO-8 binary |
-| p3 | ext4 | `/data` | read-write | `/home/pi`, carts, saves, PICO-8 config |
+| p1 | FAT32 | `/boot` (PICO8BOOT) | read-write | firmware, kernel, initramfs, dtb, `config.txt`, `cmdline.txt`, `wifi.txt`, `pico8.txt`, `authorized_keys`, pico-8 binary, carts, saves, ssh keys |
 
-- Writable paths on the root (`/etc`, `/var`) are provided by tmpfs or an overlay backed by p3.
-- p3 is auto-resized to fill the SD card on first boot.
-- p3 is mounted with journaling enabled and `commit` tuned for durability over throughput.
+The OS is a gzip cpio initramfs, unpacked into RAM. There is no root
+partition. Hardware testers (and PicoPi) preferred one FAT volume of any
+size over a second partition that cannot grow: format the card FAT32,
+copy `pico8-fat-files.zip` onto it. `sdcard.img` is a convenience image
+for Imager, not a size cap.
 
-**p1 is deliberately FAT32 so a non-technical user can edit `wifi.txt` and drop in
-`authorized_keys` by mounting the SD card on a Mac or Windows machine.**
+- The OS is in RAM. Persistent state is on p1.
+- A power cut mid-save can scramble the FAT (including firmware). Most carts never save. That is the PicoPi tradeoff.
+- sshd host keys live on p1. The vfat `umask=077` makes them look like `0600` to OpenSSH.
+
+**p1 is FAT32 so a non-technical user can edit `wifi.txt`, drop `authorized_keys`,
+and drop carts into `pico-8/carts` from a Mac.**
 
 ### 7.1 Cartridge drop-box (how carts get onto the card)
 
@@ -215,21 +219,11 @@ mechanisms:
 
 1. **Over the network (primary):** `scp game.p8 pico8:carts/` writes straight to `/data`. No
    card removal, works while the device is running. This is the developer path (G6).
-2. **By SD card (convenience):** drop `.p8` / `.p8.png` files into the `carts/` folder on the
-   FAT partition — the one volume that appears when you plug the card into a Mac. **On boot,
-   init copies them into `/data` and PICO-8 reads them from there.**
+2. **By SD card:** drop `.p8` / `.p8.png` files into `pico-8/carts` on **PICO8BOOT**.
+   That folder *is* the live cart directory (`-home /boot/pico-8`).
 
-The copy is deliberately **one-way and boot-time only**. PICO-8 never reads or writes the FAT
-partition at runtime, because:
-
-- p1 is the partition the Pi firmware boots from. Corrupting it on a power cut bricks the
-  device, not just the save data.
-- FAT has no permissions or journaling, and PICO-8 writes save data (`cstore`, `cdata`) during
-  play.
-
-So the answer to "can I just put a folder of carts on the SD card?" is yes — but it is an
-import folder, not the live cart directory. Saves and any cart PICO-8 writes itself land on
-`/data` and will not appear back on the FAT partition.
+PICO-8 writes saves on the same FAT the firmware boots from. A power cut mid-save
+can scramble the volume. The OS itself is a ramdisk and is not on the card.
 
 ---
 
@@ -292,21 +286,18 @@ flashing, and `/usr/sbin/pico8-launch` finds it at boot.
   build with the KMSDRM backend (5.4) rather than a bundled one. `pico8` is the fallback.
   `pico8_64` is aarch64 and cannot run on this 32-bit userland; the launcher says so
   explicitly rather than failing obscurely.
-- The root partition stays read-only and free of proprietary code.
+- The OS is a ramdisk, so the card never holds a root filesystem of proprietary code.
 
-Note this differs from picopi, which ran `pico8_dyn -home /mnt/pico-8` — putting PICO-8's save
-data on the FAT partition. We read the binary from p1 but keep `-home` on `/data` (p3), for
-the reasons in 7.1: PICO-8 writes `cstore`/`cdata` during play, and a power cut mid-write to
-the boot partition is what bricks the device rather than merely losing a save.
+This matches PicoPi: `pico8_dyn -home` on the FAT boot volume. Hardware testers
+preferred one volume of any size over a second partition that cannot grow.
+A power cut mid-save can scramble that FAT (firmware included). Most carts
+never save.
 
-**Where PICO-8's data lives.** PICO-8 insists on `~/.lexaloffle/pico-8/` for its config,
-cartridge directory and save data. That path must resolve onto writable `/data`:
+**Where PICO-8's data lives.** `-home /boot/pico-8` and `HOME=/boot`:
 
 | PICO-8 path | Backed by |
 |---|---|
-| `~/.lexaloffle/pico-8/config.txt` | `/data` — templated by the build on first boot, then user-owned |
-| `~/.lexaloffle/pico-8/carts/` | `/data` — the live cart directory (§7.1) |
-| `~/.lexaloffle/pico-8/cdata/` | `/data` — cartridge save data |
+| config, carts, cdata | `/boot/pico-8` on PICO8BOOT |
 
 v1.0's invented `/roms` path does not work as written; PICO-8 will not look there. The build
 reconciles this with a symlink plus `root_path` in PICO-8's own `config.txt`, and exposes a
@@ -412,7 +403,7 @@ pico-rpi/
 ├── board/pico8/rpi-zero2w/
 │   ├── config.txt
 │   ├── cmdline.txt
-│   ├── genimage.cfg            # 3-partition layout (§7)
+│   ├── genimage.cfg            # 1-partition FAT layout (§7)
 │   ├── post-build.sh
 │   └── post-image.sh
 ├── package/pico8/              # consumes vendor/pico-8/*.zip (§5.1)

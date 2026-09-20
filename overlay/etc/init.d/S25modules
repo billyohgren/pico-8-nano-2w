@@ -9,15 +9,19 @@
 
 case "$1" in
 	start)
-		# Display. SDL2's KMSDRM backend needs /dev/dri to exist before
-		# PICO-8 starts, so this must happen before the supervisor.
+		# HDMI audio (ASoC) must exist before vc4 probes, or KMS sits
+		# in deferred probe and /dev/dri never appears (beta.3).
+		modprobe cec 2>/dev/null
+		modprobe i2c-bcm2835 2>/dev/null
+		modprobe drm_display_helper 2>/dev/null
+		modprobe drm_dma_helper 2>/dev/null
+		modprobe snd-soc-core 2>/dev/null
+		modprobe snd-pcm-dmaengine 2>/dev/null
+		modprobe snd-soc-hdmi-codec 2>/dev/null
 		modprobe vc4 2>/dev/null
 
 		# Wi-Fi. The Zero 2 W has no Ethernet.
 		modprobe brcmfmac 2>/dev/null
-
-		# Analog and HDMI audio.
-		modprobe snd_bcm2835 2>/dev/null
 		;;
 	stop|restart|reload)
 		;;

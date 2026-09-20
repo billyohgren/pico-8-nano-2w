@@ -47,10 +47,13 @@ BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
 BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL_PICO8_PATH)/board/pico8/rpi-zero2w/linux.fragment"
 
 # Raspberry Pi firmware. DTB overlays are needed for vc4-kms-v3d and
-# miniuart-bt, both referenced by our config.txt.
+# disable-bt, both referenced by our config.txt.
+# Cut-down start_cd.elf is the one we boot (gpu_mem=16); the default
+# start.elf stays on the card as a fallback if KMS or HDMI audio fails.
 BR2_PACKAGE_RPI_FIRMWARE=y
 BR2_PACKAGE_RPI_FIRMWARE_BOOTCODE_BIN=y
 BR2_PACKAGE_RPI_FIRMWARE_VARIANT_PI=y
+BR2_PACKAGE_RPI_FIRMWARE_VARIANT_PI_CD=y
 BR2_PACKAGE_RPI_FIRMWARE_INSTALL_DTB_OVERLAYS=y
 BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE="$(BR2_EXTERNAL_PICO8_PATH)/board/pico8/rpi-zero2w/config.txt"
 BR2_PACKAGE_KMOD=y
@@ -90,23 +93,21 @@ BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
 # OpenSSH rather than Dropbear (PRD 5.6).
 BR2_PACKAGE_OPENSSH=y
 
-# splore needs CA certificates and a correct clock (PRD 10, 12).
+# Splore needs HTTPS wget (shells out to it for carts.lexaloffle.com)
+# and CA certificates. Clock is still a gap (PRD 12).
 BR2_PACKAGE_CA_CERTIFICATES=y
+BR2_PACKAGE_LIBOPENSSL=y
+BR2_PACKAGE_LIBOPENSSL_BIN=y
+BR2_PACKAGE_BUSYBOX_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL_PICO8_PATH)/board/pico8/rpi-zero2w/busybox.fragment"
 
-# Filesystem (PRD 7): read-only root on p2, writable /data on p3.
-# p3 is created empty by genimage and resized on first boot.
-# 90M against 69M measured usage -- enough headroom for the overlay work
-# still to come, without shipping empty blocks.
-# squashfs, xz, 1 MB blocks. The root is read-only by design, so a
-# genuinely read-only compressed filesystem costs nothing and the image
-# carries no empty space at all.
-BR2_TARGET_ROOTFS_SQUASHFS=y
-BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
-BR2_TARGET_ROOTFS_SQUASHFS_BS_1024K=y
-BR2_TARGET_ROOTFS_SQUASHFS_EXTREME_COMP=y
-# BCJ filter for ARM: reworks branch targets so xz finds more redundancy in
-# executable code. A few percent, for free.
-BR2_TARGET_ROOTFS_SQUASHFS_COMP_OPTS="-Xbcj arm"
+# Filesystem: the OS is a gzip cpio initramfs (ramdisk). The firmware
+# loads it next to the kernel; there is no root partition and no
+# rootwait. One FAT32 volume holds firmware, pico-8, carts and saves.
+# gzip rather than embedding in the kernel: overlay changes must not
+# force a kernel rebuild, and CONFIG_RD_GZIP is on every bcm2709 kernel.
+BR2_TARGET_ROOTFS_CPIO=y
+BR2_TARGET_ROOTFS_CPIO_GZIP=y
+# BR2_TARGET_ROOTFS_SQUASHFS is not set
 # BR2_TARGET_ROOTFS_TAR is not set
 
 # Host tools for image generation

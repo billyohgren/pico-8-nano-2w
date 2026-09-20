@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# mdev for hotplug only. The stock BusyBox script also coldplugs every
+# modalias in sysfs, which walks the whole tree and loads every matching
+# module -- seconds on the path to PICO-8. vc4, brcmfmac and snd are
+# loaded explicitly by S25modules; USB HID is built in.
+
+DAEMON=mdev
+PIDFILE=/run/mdev.pid
+
+case "$1" in
+	start)
+		echo /sbin/mdev > /proc/sys/kernel/hotplug 2>/dev/null
+		start-stop-daemon -S -b -m -p "$PIDFILE" -x /sbin/mdev -- -df
+		;;
+	stop)
+		start-stop-daemon -K -p "$PIDFILE" 2>/dev/null
+		;;
+	restart|reload)
+		"$0" stop
+		"$0" start
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+esac
+
+exit 0

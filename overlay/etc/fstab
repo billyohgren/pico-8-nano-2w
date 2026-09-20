@@ -1,15 +1,10 @@
-# PRD 7: p1 and p2 are read-only, p3 is the only writable partition.
-#
-# /boot is mounted exec because the user-supplied PICO-8 binary lives there
-# and is executed in place. umask=0022 gives it the executable bit -- FAT has
-# no permission bits of its own.
+# The OS is the initramfs (already mounted as /). The card is one FAT32
+# volume: firmware, the pico-8 binary, carts, saves. Mounted rw so PICO-8
+# can save. umask=077 makes files 0700 — executable for root (pico8_dyn)
+# and strict enough for sshd host keys. flush asks the driver to write
+# the FAT more often; it is not a journal.
 
-/dev/root       /               squashfs ro,noatime            0 0
-/dev/mmcblk0p1  /boot           vfat    ro,exec,umask=0022,noatime  0 0
-
-# Journaled, and committed often: the device has no shutdown button and users
-# will pull the power mid-game.
-/dev/mmcblk0p3  /data           ext4    rw,noatime,commit=5     0 2
+/dev/mmcblk0p1  /boot           vfat    rw,exec,noatime,flush,utf8,shortname=mixed,umask=077  0 0
 
 proc            /proc           proc    defaults                0 0
 devpts          /dev/pts        devpts  defaults,gid=5,mode=620 0 0

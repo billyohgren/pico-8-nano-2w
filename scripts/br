@@ -69,7 +69,9 @@ case "${1:-}" in
         $RUN sh -c 'test -f /build/images/sdcard.img' \
             || die "no image built yet — run './scripts/br build'"
         $RUN cp /build/images/sdcard.img /src/output/sdcard.img
+        $RUN cp /build/images/pico8-fat-files.zip /src/output/pico8-fat-files.zip
         echo "==> output/sdcard.img — flash with Raspberry Pi Imager"
+        echo "==> output/pico8-fat-files.zip — copy onto any FAT32 card (PicoPi style)"
         ;;
     shell)        $RUN bash ;;
     make)         shift; br_make "$@" ;;

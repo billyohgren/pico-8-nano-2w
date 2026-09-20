@@ -1,29 +1,46 @@
 # Raspberry Pi firmware configuration for the PICO-8 Zero 2 W image.
 # Installed to the FAT boot partition via BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE.
+#
+# start.elf is the full GPU firmware. start_cd.elf is faster to load (the
+# ramdisk beta booted much quicker with it) but the cut-down blob drops
+# firmware 3D; PICO-8 then dies at first GL/KMS use. Keep start_cd.elf on
+# the card and swap these three lines only as an experiment:
+#   start_file=start_cd.elf
+#   fixup_file=fixup_cd.dat
+#   gpu_mem=16
 
 start_file=start.elf
 fixup_file=fixup.dat
+gpu_mem=64
 
 kernel=zImage
 
+# No '=' -- the firmware parser treats this line specially.
+# followkernel places the ramdisk in memory immediately after zImage.
+initramfs rootfs.cpio.gz followkernel
+
 # Full KMS. PICO-8 is an SDL2 application and we run it on the KMSDRM
-# backend (PRD 5.4), which needs the vc4 DRM driver rather than the legacy
-# dispmanx/fbdev path. cma-128 reserves enough contiguous memory for the
+# backend (PRD 5.4). cma-128 reserves enough contiguous memory for the
 # display pipeline on a 512 MB board.
+#
+# HDMI audio is in this overlay. S25modules loads snd-soc-hdmi-codec
+# *before* vc4 so probe does not sit on EPROBE_DEFER (beta.3: no /dev/dri).
+# A Zero 2 W has no analog jack; this is the only speaker path.
 dtoverlay=vc4-kms-v3d,cma-128
 
-# With full KMS the firmware itself needs very little memory; the GPU
-# allocation that mattered on the legacy stack does not apply here.
-gpu_mem=64
-
-# Move Bluetooth off the PL011 so ttyAMA0 is a usable console. On this SoC
-# the overlay is called miniuart-bt -- pi3-miniuart-bt no longer exists.
-dtoverlay=miniuart-bt
+# Bluetooth is out of scope (PRD 3). disable-bt frees the PL011 onto
+# GPIO 14/15 for the serial console, without the miniuart-bt overlay.
+dtoverlay=disable-bt
 enable_uart=1
 
-# Audio out (PRD 10)
-dtparam=audio=on
+# Firmware analog/HDMI audio (snd_bcm2835) is off: KMS HDMI audio
+# through vc4 is the path. dtparam=audio=on would fight that.
 
-# Nothing on screen before PICO-8 (PRD 5.5, 11)
+# Nothing on screen before PICO-8 (PRD 5.5, 11). hdmi_force_hotplug skips
+# waiting for the display to announce itself, which is otherwise a common
+# multi-second stall.
 disable_splash=1
 disable_overscan=1
+hdmi_force_hotplug=1
+boot_delay=0
+initial_turbo=30

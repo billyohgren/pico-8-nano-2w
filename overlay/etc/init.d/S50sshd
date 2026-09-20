@@ -1,21 +1,18 @@
 #!/bin/sh
 #
-# OpenSSH on a read-only root (PRD 5.6, 7, 9).
+# OpenSSH with the OS in a ramdisk (PRD 5.6, 7, 9).
 #
-# This replaces the stock Buildroot script, which runs `ssh-keygen -A` and
-# writes host keys into /etc/ssh. That is squashfs here, so the write fails
-# and sshd never starts. Host keys and authorized_keys live on /data instead,
-# and sshd is told where to find them; the config in /etc stays immutable,
-# which is the point of a read-only root.
+# Host keys persist on the FAT volume. chmod is cosmetic; umask=077 in
+# fstab is what makes them look like 0600 to sshd. authorized_keys is
+# dropped next to wifi.txt.
 
-KEYDIR=/data/ssh
-AUTH="$KEYDIR/authorized_keys"
-BOOT_AUTH=/boot/authorized_keys
+KEYDIR=/boot/ssh
+AUTH=/boot/authorized_keys
 
 start() {
 	printf 'Starting sshd: '
 
-	mkdir -p "$KEYDIR" || { echo "FAIL (no /data)"; return 1; }
+	mkdir -p "$KEYDIR" || { echo "FAIL (no /boot)"; return 1; }
 	chmod 0700 "$KEYDIR"
 
 	# Generated once, on first boot, then kept. Regenerating every boot would
@@ -30,10 +27,9 @@ start() {
 		fi
 	done
 
-	# The user drops their public key onto the FAT partition, which is the
-	# only one they can mount on a Mac or Windows machine (PRD 7).
-	if [ -f "$BOOT_AUTH" ]; then
-		cp "$BOOT_AUTH" "$AUTH" 2>/dev/null && chmod 0600 "$AUTH"
+	# The user drops their public key onto PICO8BOOT as authorized_keys.
+	if [ -f "$AUTH" ]; then
+		chmod 0600 "$AUTH" 2>/dev/null || true
 	fi
 
 	/usr/sbin/sshd \

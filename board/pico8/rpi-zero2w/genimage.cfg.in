@@ -1,39 +1,33 @@
-# Three-partition layout (PRD 7):
+# One FAT32 partition, PicoPi-style.
 #
-#   p1  FAT32  /boot  read-only   firmware, kernel, dtb, config.txt, wifi.txt,
-#                                 pico8.txt, authorized_keys, carts/ drop-box
-#   p2  ext4   /      read-only   base system and the PICO-8 binary
-#   p3  ext4   /data  read-write  home, carts, saves, PICO-8 config
+#   p1  FAT32  PICO8BOOT  /boot  read-write
+#       firmware, kernel, initramfs, wifi.txt, pico8.txt, pico-8 binary,
+#       carts, saves, ssh keys
 #
-# The root is mounted read-only because the device has no shutdown button and
-# users will pull the power. Only p3 is ever written at runtime, and it is
-# resized to fill the card on first boot.
+# The OS is the initramfs (RAM). The card is only this volume. Format any
+# size SD as FAT32 and copy the files from pico8-fat-files.zip onto it —
+# that is how a 32 GB card stays 32 GB. sdcard.img exists for Raspberry
+# Pi Imager; it is a 256 M card image, not a ceiling.
+#
+# PICO-8 writes saves here. FAT has no journal, so a power cut mid-save
+# can scramble the volume (including firmware). That is the PicoPi
+# tradeoff: most carts never save, and testers would rather copy files
+# than reflash a two-partition image.
 #
 # The boot file list below is filled in by post-image.sh from whatever the
-# firmware package actually installed, so it never has to be maintained by
-# hand. Do not write the placeholder token anywhere else in this file --
-# sed replaces every occurrence, including ones inside comments.
+# firmware package actually installed. Do not write the placeholder token
+# anywhere else in this file -- sed replaces every occurrence.
 
 image boot.vfat {
 	vfat {
 		label = "PICO8BOOT"
+		extraargs = "-F 32"
 		files = {
 #BOOT_FILES#
 		}
 	}
 
-	size = 48M
-}
-
-# Created empty and grown on first boot. Keep this small so the image stays
-# quick to write; there is no point shipping empty blocks.
-image data.ext4 {
-	ext4 {
-		label = "data"
-		use-mke2fs = "true"
-	}
-
-	size = 128M
+	size = 256M
 }
 
 image sdcard.img {
@@ -44,15 +38,5 @@ image sdcard.img {
 		partition-type = 0xC
 		bootable = "true"
 		image = "boot.vfat"
-	}
-
-	partition rootfs {
-		partition-type = 0x83
-		image = "rootfs.squashfs"
-	}
-
-	partition data {
-		partition-type = 0x83
-		image = "data.ext4"
 	}
 }

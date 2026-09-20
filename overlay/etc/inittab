@@ -1,0 +1,27 @@
+# BusyBox init. No runlevels. No getty. No Ctrl+Alt+Del.
+#
+# sysinit entries run in order and each one is waited on. once/respawn
+# start after that and are not waited on, so PICO-8 is not blocked by
+# Wi-Fi association or ssh-keygen.
+
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mount -o remount,rw /
+::sysinit:/bin/mount -t tmpfs tmpfs /run -o mode=0755,nosuid,nodev
+::sysinit:/bin/mount -t tmpfs tmpfs /tmp -o mode=1777
+::sysinit:/bin/mkdir -p /dev/pts /dev/shm /run/lock/subsys
+null::sysinit:/bin/ln -sf /proc/self/fd /dev/fd
+null::sysinit:/bin/ln -sf /proc/self/fd/0 /dev/stdin
+null::sysinit:/bin/ln -sf /proc/self/fd/1 /dev/stdout
+null::sysinit:/bin/ln -sf /proc/self/fd/2 /dev/stderr
+::sysinit:/bin/hostname -F /etc/hostname
+::sysinit:/etc/init.d/S10mdev start
+::sysinit:/etc/init.d/S20storage start
+::sysinit:/etc/init.d/S25modules start
+
+# PICO-8 first. Wi-Fi and sshd must never delay the first frame.
+::respawn:/usr/sbin/pico8-launch
+::once:/etc/init.d/S41wifi start
+::once:/etc/init.d/S50sshd start
+
+::shutdown:/bin/umount -a -r
