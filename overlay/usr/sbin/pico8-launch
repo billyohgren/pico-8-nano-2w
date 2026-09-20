@@ -3,9 +3,8 @@
 # Find the user-supplied PICO-8 on the boot partition and run it.
 #
 # PICO-8 is not part of this image -- it is proprietary and cannot be
-# redistributed. The user drags their own pico-8 folder onto the FAT
-# partition, which is the one volume that shows up on a Mac or Windows
-# machine when the card is plugged in.
+# redistributed. The user drags their own pico-8 folder onto PICO8BOOT,
+# the firmware volume. Carts and saves live on PICO8DATA.
 #
 # Any version works: we look for the known binary names rather than a
 # pinned version, so dropping in a newer pico-8 folder just works.

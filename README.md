@@ -68,16 +68,17 @@ The build needs nothing from Lexaloffle.
 - Buildroot 2026.02.3, pinned as an unmodified submodule
 - Linux 6.12, 32-bit armhf, glibc — the ABI Lexaloffle's binary expects
 - SDL2 on KMSDRM with Mesa vc4. No X11, no Wayland, no framebuffer
-- Two partitions: FAT boot (firmware, kernel, **initramfs**), writable `/data`.
-  The OS runs from RAM; there is no root partition on the card
+- Two FAT32 volumes: **PICO8BOOT** (firmware, kernel, initramfs, the pico-8
+  binary) and **PICO8DATA** (carts, saves). Both mount on a Mac. The OS
+  runs from RAM; there is no root partition on the card
 - PICO-8 under a respawning supervisor; no getty on any tty
 - Wi-Fi provisioned from a text file on the FAT partition, brought up in the
   background so it can never delay PICO-8 starting
 
-The OS lives in a ramdisk, so a power cut cannot corrupt it. Only `/data` is
-ever written. PICO-8's saves and carts live there rather than on the boot
-partition — a power cut mid-write to `/boot` would stop the device booting
-at all, not merely lose a save.
+The OS lives in a ramdisk, so a power cut cannot corrupt it. PICO-8 writes
+only to PICO8DATA. A power cut mid-save can lose carts on that volume
+(FAT has no journal); it cannot brick the firmware on PICO8BOOT, which is
+mounted read-only.
 
 Boot time is discussed in [docs/boot.md](docs/boot.md): the ramdisk removes
 `rootwait`, and init no longer waits for Wi-Fi or `ssh-keygen` before
@@ -86,9 +87,9 @@ PICO-8. The closed GPU firmware is still most of a 3 s budget.
 ## Known gaps
 
 - No mDNS, so `pico8.local` does not resolve. Find the IP on your router.
-- `/data` is a fixed 128 MB and does not grow to fill the card.
-- Dropping carts into a folder on the FAT partition does not import them yet.
-  Use `scp` to `/data/pico-8/carts/`.
+- PICO8DATA is a fixed 128 MB and does not grow to fill the card.
+- Drop carts into `pico-8/carts` on the **PICO8DATA** volume. The
+  `carts/` folder on PICO8BOOT is not imported.
 
 ## Credits
 

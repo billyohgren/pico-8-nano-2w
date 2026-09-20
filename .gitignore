@@ -8,6 +8,9 @@ vendor/pico-8/*
 output/*
 !output/.gitkeep
 
+# Local compose override (bind-mounts /build onto a case-sensitive volume)
+compose.override.yaml
+
 # Buildroot output never lands here (it lives in a Docker volume), but guard
 # against an accidental in-tree build.
 /build/

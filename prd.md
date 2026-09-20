@@ -197,18 +197,20 @@ root filesystem, which corrupts SD cards under those conditions. Corrected layou
 
 | Partition | Format | Mount | Mode | Contents |
 |-----------|--------|-------|------|----------|
-| p1 | FAT32 | `/boot` | **read-only** | firmware, kernel, initramfs, dtb, `config.txt`, `cmdline.txt`, `wifi.txt`, `pico8.txt`, `authorized_keys`, `carts/` (drop-box, see §7.1) |
-| p2 | ext4 | `/data` | read-write | carts, saves, PICO-8 config, ssh host keys |
+| p1 | FAT32 | `/boot` (PICO8BOOT) | **read-only** | firmware, kernel, initramfs, dtb, `config.txt`, `cmdline.txt`, `wifi.txt`, `pico8.txt`, `authorized_keys`, the pico-8 binary |
+| p2 | FAT32 | `/data` (PICO8DATA) | read-write | carts, saves, PICO-8 config, ssh host keys |
 
 The OS is a gzip cpio initramfs, unpacked into RAM. There is no root
 partition. Only p2 is written at runtime.
 
 - The OS is in RAM, so `/etc` is writable for the life of the boot and discarded on power-off. Persistent state belongs on p2.
-- p2 is auto-resized to fill the SD card on first boot.
-- p2 is mounted with journaling enabled and `commit` tuned for durability over throughput.
+- Both volumes mount on a Mac or Windows machine. p1 is never written while PICO-8 runs, so a power cut cannot brick the firmware.
+- p2 has no journal. `flush` is set; a mid-write pull can still lose saves.
+- sshd host keys live on p2. The vfat `umask=077` makes them look like `0600` to OpenSSH; FAT has no permission bits of its own.
 
 **p1 is deliberately FAT32 so a non-technical user can edit `wifi.txt` and drop in
-`authorized_keys` by mounting the SD card on a Mac or Windows machine.**
+`authorized_keys` by mounting the SD card on a Mac or Windows machine.** p2 is
+FAT32 so the same user can drop carts onto `pico-8/carts` without `scp`.
 
 ### 7.1 Cartridge drop-box (how carts get onto the card)
 
@@ -217,21 +219,13 @@ mechanisms:
 
 1. **Over the network (primary):** `scp game.p8 pico8:carts/` writes straight to `/data`. No
    card removal, works while the device is running. This is the developer path (G6).
-2. **By SD card (convenience):** drop `.p8` / `.p8.png` files into the `carts/` folder on the
-   FAT partition — the one volume that appears when you plug the card into a Mac. **On boot,
-   init copies them into `/data` and PICO-8 reads them from there.**
+2. **By SD card (convenience):** drop `.p8` / `.p8.png` files into `pico-8/carts` on
+   **PICO8DATA**. That folder *is* the live cart directory PICO-8 uses (`-home /data/pico-8`).
+   No import step.
 
-The copy is deliberately **one-way and boot-time only**. PICO-8 never reads or writes the FAT
-partition at runtime, because:
-
-- p1 is the partition the Pi firmware boots from. Corrupting it on a power cut bricks the
-  device, not just the save data.
-- FAT has no permissions or journaling, and PICO-8 writes save data (`cstore`, `cdata`) during
-  play.
-
-So the answer to "can I just put a folder of carts on the SD card?" is yes — but it is an
-import folder, not the live cart directory. Saves and any cart PICO-8 writes itself land on
-`/data` and will not appear back on the FAT partition.
+p1 is never written at runtime, because it is the partition the Pi firmware boots from.
+Corrupting it on a power cut would brick the device. p2 is FAT, so a power cut can lose
+saves; it cannot stop the next boot.
 
 ---
 
@@ -414,7 +408,7 @@ pico-rpi/
 ├── board/pico8/rpi-zero2w/
 │   ├── config.txt
 │   ├── cmdline.txt
-│   ├── genimage.cfg            # 2-partition layout (§7): FAT boot + ext4 data
+│   ├── genimage.cfg            # 2-partition layout (§7): FAT boot + FAT data
 │   ├── post-build.sh
 │   └── post-image.sh
 ├── package/pico8/              # consumes vendor/pico-8/*.zip (§5.1)

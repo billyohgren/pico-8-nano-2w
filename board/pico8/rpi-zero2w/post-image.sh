@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Assemble the two-partition SD card image (FAT boot + ext4 data).
+# Assemble the two-partition SD card image (FAT boot + FAT data).
 # The OS is rootfs.cpio.gz, loaded by the firmware as an initramfs.
 #
 # Derived from Buildroot's board/raspberrypi/post-image.sh (GPL-2.0-or-later):
@@ -26,6 +26,12 @@ if [ ! -f "${BINARIES_DIR}/rpi-firmware/pico8.txt" ]; then
 	cp "${BOARD_DIR}/pico8.txt" "${BINARIES_DIR}/rpi-firmware/pico8.txt"
 fi
 mkdir -p "${BINARIES_DIR}/rpi-firmware/carts"
+# Live cart directory on PICO8DATA. Basename "pico-8" is what genimage
+# writes onto the volume. The README keeps the otherwise-empty folder
+# in the FAT image (mcopy skips empty dirs).
+mkdir -p "${BINARIES_DIR}/data-skel/pico-8/carts"
+printf '%s\n' 'Drop .p8 and .p8.png carts here.' \
+	> "${BINARIES_DIR}/data-skel/pico-8/carts/README.txt"
 
 CPIO="${BINARIES_DIR}/rootfs.cpio.gz"
 if [ ! -f "${CPIO}" ]; then

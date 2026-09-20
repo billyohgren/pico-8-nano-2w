@@ -40,9 +40,9 @@ know by measuring.
 - Root filesystem is `rootfs.cpio.gz`, loaded by the firmware:
   `initramfs rootfs.cpio.gz followkernel` (no `=` on that line).
 - No `root=` / `rootwait` on the kernel command line.
-- The card has **two** partitions: FAT `/boot` (firmware, kernel,
-  initramfs, the user’s `pico-8` folder) and ext4 `/data` (saves,
-  carts). There is no root partition.
+- The card has **two** FAT32 volumes: PICO8BOOT (firmware, kernel,
+  initramfs, the user’s `pico-8` binary) and PICO8DATA (saves, carts).
+  There is no root partition.
 - Power-cut safety is the same as before: the OS is never written, and
   PICO-8 still writes only to `/data`.
 

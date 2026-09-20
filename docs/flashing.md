@@ -141,11 +141,11 @@ PICO-8 should come up fullscreen after a few seconds. It runs under BusyBox
 init's `respawn`, so if it exits it is restarted immediately — you should
 never land on a shell.
 
-The OS is a ramdisk (`rootfs.cpio.gz` on the FAT partition, loaded by the
-firmware). Your carts and saves live on the second partition, mounted at
-`/data`, not on the FAT partition. That is deliberate: PICO-8 writes save
-data during play, and a power cut mid-write to the boot partition is what
-would stop the device booting at all.
+The OS is a ramdisk (`rootfs.cpio.gz` on PICO8BOOT). Carts and saves live
+on the second volume, **PICO8DATA**. Drop `.p8` / `.p8.png` files into
+`pico-8/carts` on that volume. PICO-8 writes saves there too. A power cut
+mid-write can corrupt PICO8DATA (FAT has no journal); it cannot brick
+PICO8BOOT, which is mounted read-only.
 
 Launch mode (`pico8.txt`) and boot-time choices are in
 [docs/boot.md](boot.md).
@@ -172,12 +172,11 @@ pico8-launch: found only pico8_64, which is 64-bit ...
 
 - **No mDNS.** `pico8.local` does not resolve; you need the IP address (PRD
   8.3). This is the main thing standing between you and `scp game.p8 pico8:`.
-- **`/data` does not auto-resize.** It is a fixed 128 MB and does not grow to
-  fill the card. Fine for a large cart library, but the rest of the card is
-  unused.
-- **No cart drop-box.** Copying `.p8` files into a `carts/` folder on
-  PICO8BOOT does nothing yet; they are not imported to `/data` (PRD 7.1).
-  Use `scp` to `/data/pico-8/carts/` instead.
+- **PICO8DATA does not auto-resize.** It is a fixed 128 MB and does not grow
+  to fill the card. Fine for a large cart library, but the rest of the card
+  is unused.
+- **Carts go on PICO8DATA.** Copy `.p8` files into `pico-8/carts` on that
+  volume. The `carts/` folder on PICO8BOOT is not imported.
 - **Never booted on hardware.** Everything here is verified by inspecting the
   built image, not by running it. Treat the first boot as a test, and bring a
   serial adapter.
