@@ -59,10 +59,10 @@ up on the ramdisk.
 
 ### 2. Firmware
 
-- Boot `start.elf` / `fixup.dat` with `gpu_mem=64`. `start_cd.elf` is
-  faster (hardware beta: boot was much quicker) but PICO-8 then died
-  at first GL use — the cut-down blob drops firmware 3D. It stays on
-  the card; swapping the three lines in `config.txt` is the A/B.
+- Boot `start.elf` / `fixup.dat` with `gpu_mem=64`.
+- `dtoverlay=vc4-kms-v3d,cma-128,noaudio`. Hardware beta: vc4 bound
+  HVS then `deferred probe pending`, `/dev/dri` empty, PICO-8 never
+  started. HDMI audio in the overlay is what was stalling KMS.
 - `disable-bt` instead of `miniuart-bt`. Bluetooth is out of scope;
   this still puts the PL011 on GPIO 14/15 for serial.
 - `boot_delay=0`, `disable_splash=1`, `hdmi_force_hotplug=1`,

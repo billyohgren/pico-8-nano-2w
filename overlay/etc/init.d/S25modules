@@ -9,14 +9,18 @@
 
 case "$1" in
 	start)
-		# Display. SDL2's KMSDRM backend needs /dev/dri to exist before
-		# PICO-8 starts, so this must happen before the supervisor.
+		# Display. Load vc4's hard deps first so HDMI/DDC/CEC are not
+		# EPROBE_DEFER forever (hardware beta: HVS bound, /dev/dri empty).
+		modprobe cec 2>/dev/null
+		modprobe i2c-bcm2835 2>/dev/null
+		modprobe drm_display_helper 2>/dev/null
+		modprobe drm_dma_helper 2>/dev/null
 		modprobe vc4 2>/dev/null
 
 		# Wi-Fi. The Zero 2 W has no Ethernet.
 		modprobe brcmfmac 2>/dev/null
 
-		# Analog and HDMI audio.
+		# Analog audio (HDMI audio is off in the overlay until KMS works).
 		modprobe snd_bcm2835 2>/dev/null
 		;;
 	stop|restart|reload)

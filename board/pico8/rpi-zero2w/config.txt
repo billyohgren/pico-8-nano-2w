@@ -20,10 +20,13 @@ kernel=zImage
 initramfs rootfs.cpio.gz followkernel
 
 # Full KMS. PICO-8 is an SDL2 application and we run it on the KMSDRM
-# backend (PRD 5.4), which needs the vc4 DRM driver rather than the legacy
-# dispmanx/fbdev path. cma-128 reserves enough contiguous memory for the
+# backend (PRD 5.4). cma-128 reserves enough contiguous memory for the
 # display pipeline on a 512 MB board.
-dtoverlay=vc4-kms-v3d,cma-128
+#
+# noaudio: hardware beta never got /dev/dri. vc4 bound HVS then sat in
+# deferred probe (`platform soc:gpu: deferred probe pending`). That is
+# the HDMI-audio path waiting on ASoC. Picture first; HDMI audio later.
+dtoverlay=vc4-kms-v3d,cma-128,noaudio
 
 # Bluetooth is out of scope (PRD 3). disable-bt frees the PL011 onto
 # GPIO 14/15 for the serial console, without the miniuart-bt overlay.
