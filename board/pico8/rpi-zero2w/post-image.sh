@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# Assemble the three-partition SD card image (PRD 7).
+# Assemble the two-partition SD card image (FAT boot + ext4 data).
+# The OS is rootfs.cpio.gz, loaded by the firmware as an initramfs.
 #
 # Derived from Buildroot's board/raspberrypi/post-image.sh (GPL-2.0-or-later):
 # the genimage invocation and the generated boot-file list come from there. The
@@ -25,6 +26,13 @@ if [ ! -f "${BINARIES_DIR}/rpi-firmware/pico8.txt" ]; then
 	cp "${BOARD_DIR}/pico8.txt" "${BINARIES_DIR}/rpi-firmware/pico8.txt"
 fi
 mkdir -p "${BINARIES_DIR}/rpi-firmware/carts"
+
+CPIO="${BINARIES_DIR}/rootfs.cpio.gz"
+if [ ! -f "${CPIO}" ]; then
+	echo "post-image: missing ${CPIO} (need BR2_TARGET_ROOTFS_CPIO_GZIP)" >&2
+	exit 1
+fi
+cp "${CPIO}" "${BINARIES_DIR}/rpi-firmware/rootfs.cpio.gz"
 
 FILES=()
 for i in "${BINARIES_DIR}"/*.dtb "${BINARIES_DIR}"/rpi-firmware/*; do

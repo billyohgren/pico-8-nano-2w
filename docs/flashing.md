@@ -54,6 +54,7 @@ PICO8BOOT/
 │   └── ...
 ├── config.txt
 ├── pico8.txt
+├── rootfs.cpio.gz    <- the OS (ramdisk)
 ├── wifi.txt
 ├── zImage
 └── ...
@@ -140,10 +141,14 @@ PICO-8 should come up fullscreen after a few seconds. It runs under BusyBox
 init's `respawn`, so if it exits it is restarted immediately — you should
 never land on a shell.
 
-Your carts and saves live on the third partition, mounted at `/data`, not on
-the FAT partition. That is deliberate: PICO-8 writes save data during play,
-and a power cut mid-write to the boot partition is what would stop the device
-booting at all.
+The OS is a ramdisk (`rootfs.cpio.gz` on the FAT partition, loaded by the
+firmware). Your carts and saves live on the second partition, mounted at
+`/data`, not on the FAT partition. That is deliberate: PICO-8 writes save
+data during play, and a power cut mid-write to the boot partition is what
+would stop the device booting at all.
+
+Launch mode (`pico8.txt`) and boot-time choices are in
+[docs/boot.md](boot.md).
 
 ## If nothing appears
 

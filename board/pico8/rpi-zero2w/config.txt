@@ -1,10 +1,21 @@
 # Raspberry Pi firmware configuration for the PICO-8 Zero 2 W image.
 # Installed to the FAT boot partition via BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE.
+#
+# Boot time: start_cd.elf is the cut-down GPU firmware. Instant-pi measured
+# ~4 s of firmware overhead on a Zero W with it, vs ~8 s+ for start.elf.
+# gpu_mem=16 is required for the cut-down blob. 3D is in the kernel (KMS),
+# not the firmware, so this is the right split. Fallback if HDMI audio or
+# KMS fails: start_file=start.elf, fixup_file=fixup.dat, gpu_mem=64.
 
-start_file=start.elf
-fixup_file=fixup.dat
+start_file=start_cd.elf
+fixup_file=fixup_cd.dat
+gpu_mem=16
 
 kernel=zImage
+
+# No '=' -- the firmware parser treats this line specially.
+# followkernel places the ramdisk in memory immediately after zImage.
+initramfs rootfs.cpio.gz followkernel
 
 # Full KMS. PICO-8 is an SDL2 application and we run it on the KMSDRM
 # backend (PRD 5.4), which needs the vc4 DRM driver rather than the legacy
@@ -12,18 +23,19 @@ kernel=zImage
 # display pipeline on a 512 MB board.
 dtoverlay=vc4-kms-v3d,cma-128
 
-# With full KMS the firmware itself needs very little memory; the GPU
-# allocation that mattered on the legacy stack does not apply here.
-gpu_mem=64
-
-# Move Bluetooth off the PL011 so ttyAMA0 is a usable console. On this SoC
-# the overlay is called miniuart-bt -- pi3-miniuart-bt no longer exists.
-dtoverlay=miniuart-bt
+# Bluetooth is out of scope (PRD 3). disable-bt frees the PL011 onto
+# GPIO 14/15 for the serial console, without the miniuart-bt overlay.
+dtoverlay=disable-bt
 enable_uart=1
 
 # Audio out (PRD 10)
 dtparam=audio=on
 
-# Nothing on screen before PICO-8 (PRD 5.5, 11)
+# Nothing on screen before PICO-8 (PRD 5.5, 11). hdmi_force_hotplug skips
+# waiting for the display to announce itself, which is otherwise a common
+# multi-second stall.
 disable_splash=1
 disable_overscan=1
+hdmi_force_hotplug=1
+boot_delay=0
+initial_turbo=30

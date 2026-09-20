@@ -78,8 +78,13 @@ esac
 export SDL_VIDEODRIVER=kmsdrm
 export HOME="${DATA}"
 
-# Peripherals (controllers) need a moment to enumerate before PICO-8 scans.
-sleep 1
+# Wait for KMS, not a fixed 1 s. USB pads hotplug; a whole second on the
+# path to first frame was a round-off error we cannot afford.
+n=0
+while [ ! -e /dev/dri/card0 ] && [ "$n" -lt 40 ]; do
+	sleep 0.05
+	n=$((n + 1))
+done
 
 set -- -home "${PICO_HOME}" -root_path "${PICO_HOME}/carts"
 [ "$MODE" = splore ] && set -- "$@" -splore

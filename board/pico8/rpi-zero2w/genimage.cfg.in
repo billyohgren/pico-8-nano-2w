@@ -1,13 +1,15 @@
-# Three-partition layout (PRD 7):
+# Two-partition layout:
 #
-#   p1  FAT32  /boot  read-only   firmware, kernel, dtb, config.txt, wifi.txt,
-#                                 pico8.txt, authorized_keys, carts/ drop-box
-#   p2  ext4   /      read-only   base system and the PICO-8 binary
-#   p3  ext4   /data  read-write  home, carts, saves, PICO-8 config
+#   p1  FAT32  /boot  read-only   firmware, kernel, initramfs, dtb, config.txt,
+#                                 wifi.txt, pico8.txt, authorized_keys, carts/
+#   p2  ext4   /data  read-write  home, carts, saves, PICO-8 config
 #
-# The root is mounted read-only because the device has no shutdown button and
-# users will pull the power. Only p3 is ever written at runtime, and it is
-# resized to fill the card on first boot.
+# The OS is the initramfs, unpacked into RAM. There is no root partition.
+# Only p2 is ever written at runtime. It is resized to fill the card on
+# first boot (not yet implemented).
+#
+# Boot is 192M because it has to hold gzip(rootfs) plus the user's pico-8
+# folder. Empty FAT zeros zip off the image.
 #
 # The boot file list below is filled in by post-image.sh from whatever the
 # firmware package actually installed, so it never has to be maintained by
@@ -22,7 +24,7 @@ image boot.vfat {
 		}
 	}
 
-	size = 48M
+	size = 192M
 }
 
 # Created empty and grown on first boot. Keep this small so the image stays
@@ -44,11 +46,6 @@ image sdcard.img {
 		partition-type = 0xC
 		bootable = "true"
 		image = "boot.vfat"
-	}
-
-	partition rootfs {
-		partition-type = 0x83
-		image = "rootfs.squashfs"
 	}
 
 	partition data {

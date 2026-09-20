@@ -173,12 +173,12 @@ viable base. Upstream Buildroot already provides `configs/raspberrypizero2w_defc
 
 ```
 Power on
-  → Pi bootloader (bootcode.bin / start.elf, from FAT boot partition)
-  → Linux kernel + bcm2710-rpi-zero-2-w.dtb
+  → Pi bootloader (bootcode.bin / start_cd.elf, from FAT boot partition)
+  → Linux kernel + initramfs (OS in RAM) + bcm2710-rpi-zero-2-w.dtb
   → BusyBox init
-      ├─ mount /data (rw), overlay writable paths
-      ├─ start PICO-8 supervisor          ← foreground, blocks nothing
-      └─ start network + sshd             ← background, never blocks boot
+      ├─ mount /boot (ro), /data (rw)
+      ├─ start PICO-8 supervisor          ← first, not behind rcS
+      └─ start network + sshd             ← once, never blocks PICO-8
   → DRM/KMS mode set
   → PICO-8 fullscreen
 ```
@@ -197,13 +197,15 @@ root filesystem, which corrupts SD cards under those conditions. Corrected layou
 
 | Partition | Format | Mount | Mode | Contents |
 |-----------|--------|-------|------|----------|
-| p1 | FAT32 | `/boot` | **read-only** | firmware, kernel, dtb, `config.txt`, `cmdline.txt`, `wifi.txt`, `pico8.txt`, `authorized_keys`, `carts/` (drop-box, see §7.1) |
-| p2 | ext4 or squashfs | `/` | **read-only** | base system, PICO-8 binary |
-| p3 | ext4 | `/data` | read-write | `/home/pi`, carts, saves, PICO-8 config |
+| p1 | FAT32 | `/boot` | **read-only** | firmware, kernel, initramfs, dtb, `config.txt`, `cmdline.txt`, `wifi.txt`, `pico8.txt`, `authorized_keys`, `carts/` (drop-box, see §7.1) |
+| p2 | ext4 | `/data` | read-write | carts, saves, PICO-8 config, ssh host keys |
 
-- Writable paths on the root (`/etc`, `/var`) are provided by tmpfs or an overlay backed by p3.
-- p3 is auto-resized to fill the SD card on first boot.
-- p3 is mounted with journaling enabled and `commit` tuned for durability over throughput.
+The OS is a gzip cpio initramfs, unpacked into RAM. There is no root
+partition. Only p2 is written at runtime.
+
+- The OS is in RAM, so `/etc` is writable for the life of the boot and discarded on power-off. Persistent state belongs on p2.
+- p2 is auto-resized to fill the SD card on first boot.
+- p2 is mounted with journaling enabled and `commit` tuned for durability over throughput.
 
 **p1 is deliberately FAT32 so a non-technical user can edit `wifi.txt` and drop in
 `authorized_keys` by mounting the SD card on a Mac or Windows machine.**
@@ -292,10 +294,10 @@ flashing, and `/usr/sbin/pico8-launch` finds it at boot.
   build with the KMSDRM backend (5.4) rather than a bundled one. `pico8` is the fallback.
   `pico8_64` is aarch64 and cannot run on this 32-bit userland; the launcher says so
   explicitly rather than failing obscurely.
-- The root partition stays read-only and free of proprietary code.
+- The OS is a ramdisk, so the card never holds a root filesystem of proprietary code.
 
 Note this differs from picopi, which ran `pico8_dyn -home /mnt/pico-8` — putting PICO-8's save
-data on the FAT partition. We read the binary from p1 but keep `-home` on `/data` (p3), for
+data on the FAT partition. We read the binary from p1 but keep `-home` on `/data` (p2), for
 the reasons in 7.1: PICO-8 writes `cstore`/`cdata` during play, and a power cut mid-write to
 the boot partition is what bricks the device rather than merely losing a save.
 
@@ -412,7 +414,7 @@ pico-rpi/
 ├── board/pico8/rpi-zero2w/
 │   ├── config.txt
 │   ├── cmdline.txt
-│   ├── genimage.cfg            # 3-partition layout (§7)
+│   ├── genimage.cfg            # 2-partition layout (§7): FAT boot + ext4 data
 │   ├── post-build.sh
 │   └── post-image.sh
 ├── package/pico8/              # consumes vendor/pico-8/*.zip (§5.1)

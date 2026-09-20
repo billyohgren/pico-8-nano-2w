@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# Wait for the SD controller, then mount /boot and /data.
+#
+# The OS is the initramfs, so the kernel does not wait for a root
+# partition. Firmware already read the card, but the kernel MMC driver
+# may still be probing when init starts. Without this, mount -a races
+# and PICO-8 cannot find its binary on /boot.
+
+wait_dev() {
+	n=0
+	while [ ! -b "$1" ] && [ "$n" -lt 50 ]; do
+		sleep 0.1
+		n=$((n + 1))
+	done
+	[ -b "$1" ]
+}
+
+case "$1" in
+	start)
+		wait_dev /dev/mmcblk0p1 || echo "storage: /dev/mmcblk0p1 never appeared" >&2
+		wait_dev /dev/mmcblk0p2 || echo "storage: /dev/mmcblk0p2 never appeared" >&2
+		mount -a
+		;;
+	stop)
+		umount /data /boot 2>/dev/null || true
+		;;
+	*)
+		echo "Usage: $0 {start|stop}"
+		exit 1
+esac
+
+exit 0
