@@ -174,5 +174,4 @@ pico8-launch: found only pico8_64, which is 64-bit ...
   8.3). This is the main thing standing between you and `scp game.p8 pico8:`.
 - **Copy-install uses the whole card.** Unzip `pico8-fat-files.zip` onto a
   FAT32 volume of any size. `sdcard.img` is 256 MB if you flash it with Imager.
-- **BusyBox wget has no HTTPS**, so Splore cannot fetch BBS carts yet.
-- **HDMI audio is off** so KMS can probe. A Zero 2 W has no analog jack.
+- **No NTP yet.** Splore HTTPS may fail until the clock is right.

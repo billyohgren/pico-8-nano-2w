@@ -93,8 +93,12 @@ BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
 # OpenSSH rather than Dropbear (PRD 5.6).
 BR2_PACKAGE_OPENSSH=y
 
-# splore needs CA certificates and a correct clock (PRD 10, 12).
+# Splore needs HTTPS wget (shells out to it for carts.lexaloffle.com)
+# and CA certificates. Clock is still a gap (PRD 12).
 BR2_PACKAGE_CA_CERTIFICATES=y
+BR2_PACKAGE_LIBOPENSSL=y
+BR2_PACKAGE_LIBOPENSSL_BIN=y
+BR2_PACKAGE_BUSYBOX_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL_PICO8_PATH)/board/pico8/rpi-zero2w/busybox.fragment"
 
 # Filesystem: the OS is a gzip cpio initramfs (ramdisk). The firmware
 # loads it next to the kernel; there is no root partition and no

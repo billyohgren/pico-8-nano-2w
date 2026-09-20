@@ -1,0 +1,5 @@
+# Splore shells out to wget for https://carts.lexaloffle.com/...
+# Stock BusyBox wget is HTTP/FTP only; hardware log was
+# `wget: not an http or ftp url: https://...`
+CONFIG_FEATURE_WGET_HTTPS=y
+CONFIG_FEATURE_WGET_OPENSSL=y

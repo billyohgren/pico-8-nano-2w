@@ -60,9 +60,9 @@ up on the ramdisk.
 ### 2. Firmware
 
 - Boot `start.elf` / `fixup.dat` with `gpu_mem=64`.
-- `dtoverlay=vc4-kms-v3d,cma-128,noaudio`. Hardware beta: vc4 bound
-  HVS then `deferred probe pending`, `/dev/dri` empty, PICO-8 never
-  started. HDMI audio in the overlay is what was stalling KMS.
+- `dtoverlay=vc4-kms-v3d,cma-128`. HDMI audio is on; S25modules loads
+  `snd-soc-hdmi-codec` before `vc4` so probe does not defer (beta.3).
+  A Zero 2 W has no analog jack.
 - `disable-bt` instead of `miniuart-bt`. Bluetooth is out of scope;
   this still puts the PL011 on GPIO 14/15 for serial.
 - `boot_delay=0`, `disable_splash=1`, `hdmi_force_hotplug=1`,

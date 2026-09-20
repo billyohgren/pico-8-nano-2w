@@ -89,8 +89,7 @@ PICO-8. The closed GPU firmware is still most of a 3 s budget.
 ## Known gaps
 
 - No mDNS, so `pico8.local` does not resolve. Find the IP on your router.
-- BusyBox wget has no HTTPS yet, so Splore cannot download BBS carts.
-- HDMI audio is off (`noaudio`) so KMS can probe; analog jack does not exist on a Zero 2 W.
+- No NTP yet; Splore TLS may still fail if the clock is 1970.
 
 ## Credits
 

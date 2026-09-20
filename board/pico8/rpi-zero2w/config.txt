@@ -23,18 +23,18 @@ initramfs rootfs.cpio.gz followkernel
 # backend (PRD 5.4). cma-128 reserves enough contiguous memory for the
 # display pipeline on a 512 MB board.
 #
-# noaudio: hardware beta never got /dev/dri. vc4 bound HVS then sat in
-# deferred probe (`platform soc:gpu: deferred probe pending`). That is
-# the HDMI-audio path waiting on ASoC. Picture first; HDMI audio later.
-dtoverlay=vc4-kms-v3d,cma-128,noaudio
+# HDMI audio is in this overlay. S25modules loads snd-soc-hdmi-codec
+# *before* vc4 so probe does not sit on EPROBE_DEFER (beta.3: no /dev/dri).
+# A Zero 2 W has no analog jack; this is the only speaker path.
+dtoverlay=vc4-kms-v3d,cma-128
 
 # Bluetooth is out of scope (PRD 3). disable-bt frees the PL011 onto
 # GPIO 14/15 for the serial console, without the miniuart-bt overlay.
 dtoverlay=disable-bt
 enable_uart=1
 
-# Audio out (PRD 10)
-dtparam=audio=on
+# Firmware analog/HDMI audio (snd_bcm2835) is off: KMS HDMI audio
+# through vc4 is the path. dtparam=audio=on would fight that.
 
 # Nothing on screen before PICO-8 (PRD 5.5, 11). hdmi_force_hotplug skips
 # waiting for the display to announce itself, which is otherwise a common
