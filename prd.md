@@ -197,7 +197,7 @@ root filesystem, which corrupts SD cards under those conditions. Corrected layou
 
 | Partition | Format | Mount | Mode | Contents |
 |-----------|--------|-------|------|----------|
-| p1 | FAT32 | `/boot` | **read-only** | firmware, kernel, dtb, `config.txt`, `cmdline.txt`, `wifi.txt`, `authorized_keys`, `carts/` (drop-box, see §7.1) |
+| p1 | FAT32 | `/boot` | **read-only** | firmware, kernel, dtb, `config.txt`, `cmdline.txt`, `wifi.txt`, `pico8.txt`, `authorized_keys`, `carts/` (drop-box, see §7.1) |
 | p2 | ext4 or squashfs | `/` | **read-only** | base system, PICO-8 binary |
 | p3 | ext4 | `/data` | read-write | `/home/pi`, carts, saves, PICO-8 config |
 
@@ -311,6 +311,10 @@ cartridge directory and save data. That path must resolve onto writable `/data`:
 v1.0's invented `/roms` path does not work as written; PICO-8 will not look there. The build
 reconciles this with a symlink plus `root_path` in PICO-8's own `config.txt`, and exposes a
 friendly `~/carts` for the SCP target in §9.
+- Launch mode is selected from `/boot/pico8.txt` (`mode=prompt` or `mode=splore`),
+  the same FAT-partition pattern as `wifi.txt`. Missing or empty file boots to
+  the PICO-8 prompt. `mode=splore` passes `-splore` so Splore comes up instead
+  of the editor — usable with a gamepad, and with the BBS if Wi-Fi is up.
 - **Auto-run cartridge (G12):** if a designated cart is present, boot straight into it;
   otherwise boot to the PICO-8 prompt.
 - `splore` (online cart browser) requires `ca-certificates` and a correct clock — see §12.

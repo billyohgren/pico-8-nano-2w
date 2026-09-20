@@ -38,8 +38,10 @@ yourself (see below), then:
 
    `country=` is required. Without a regulatory domain the radio does not know
    which channels are legal where you are and will not transmit.
-5. Optionally copy your SSH public key there as `authorized_keys`.
-6. Boot with HDMI and a USB keyboard.
+5. Optionally edit `pico8.txt` on the same volume and set `mode=splore` to
+   boot into Splore (the cartridge browser) instead of the command prompt.
+6. Optionally copy your SSH public key there as `authorized_keys`.
+7. Boot with HDMI and a USB keyboard.
 
 Full detail, including serial console setup, is in [docs/flashing.md](docs/flashing.md).
 

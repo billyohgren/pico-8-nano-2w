@@ -53,6 +53,7 @@ PICO8BOOT/
 │   ├── pico8.dat
 │   └── ...
 ├── config.txt
+├── pico8.txt
 ├── wifi.txt
 ├── zImage
 └── ...
@@ -89,7 +90,29 @@ If you need something `wifi.txt` cannot express — EAP, a hidden SSID, several
 networks — put a complete `wpa_supplicant.conf` on the same partition and it
 takes priority.
 
-## 4a. SSH (optional)
+## 4a. Launch mode (optional)
+
+PICO-8 can start two ways. Edit `pico8.txt` on the same PICO8BOOT volume:
+
+```
+mode=prompt
+```
+
+or
+
+```
+mode=splore
+```
+
+`prompt` is the command prompt / editor, and is the default if the file is
+missing or both lines stay commented. `splore` is the cartridge browser:
+local carts with a gamepad, or the Lexaloffle BBS if Wi-Fi is up.
+
+Online Splore needs a working clock for TLS. This image has CA certificates
+but no NTP client yet, so BBS downloads may fail until the clock is set.
+Local carts in Splore do not need the network.
+
+## 4b. SSH (optional)
 
 Copy your public key to the boot partition as `authorized_keys`:
 

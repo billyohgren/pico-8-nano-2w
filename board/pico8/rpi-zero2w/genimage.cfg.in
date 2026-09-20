@@ -1,7 +1,7 @@
 # Three-partition layout (PRD 7):
 #
 #   p1  FAT32  /boot  read-only   firmware, kernel, dtb, config.txt, wifi.txt,
-#                                 authorized_keys, carts/ drop-box
+#                                 pico8.txt, authorized_keys, carts/ drop-box
 #   p2  ext4   /      read-only   base system and the PICO-8 binary
 #   p3  ext4   /data  read-write  home, carts, saves, PICO-8 config
 #

@@ -21,6 +21,9 @@ cp "${BOARD_DIR}/cmdline.txt" "${BINARIES_DIR}/rpi-firmware/cmdline.txt"
 if [ ! -f "${BINARIES_DIR}/rpi-firmware/wifi.txt" ]; then
 	cp "${BOARD_DIR}/wifi.txt" "${BINARIES_DIR}/rpi-firmware/wifi.txt"
 fi
+if [ ! -f "${BINARIES_DIR}/rpi-firmware/pico8.txt" ]; then
+	cp "${BOARD_DIR}/pico8.txt" "${BINARIES_DIR}/rpi-firmware/pico8.txt"
+fi
 mkdir -p "${BINARIES_DIR}/rpi-firmware/carts"
 
 FILES=()

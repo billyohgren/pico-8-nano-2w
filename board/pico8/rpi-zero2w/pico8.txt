@@ -1,0 +1,12 @@
+# How PICO-8 starts. Edit this on any Mac or Windows machine: plug the
+# SD card in and it appears as a drive called PICO8BOOT. Save, eject, boot.
+#
+# Uncomment one. If this file is missing or both stay commented, you get
+# the command prompt.
+#
+#mode=prompt
+#mode=splore
+#
+# prompt  -- the PICO-8 command prompt / editor
+# splore  -- Splore, the cartridge browser. Browse local carts with a
+#            gamepad, or the Lexaloffle BBS if Wi-Fi is up.

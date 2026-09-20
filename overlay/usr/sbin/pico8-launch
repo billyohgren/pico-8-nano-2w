@@ -56,6 +56,24 @@ fi
 # the boot partition is what bricks the device (PRD 7.1).
 mkdir -p "${PICO_HOME}"
 
+# Launch mode from /boot/pico8.txt (same shape as wifi.txt). CR is stripped
+# so a file saved on Windows works. Unknown or empty -> prompt, which is
+# what this script did before the file existed.
+MODE=prompt
+if [ -f "${BOOT}/pico8.txt" ]; then
+	m=$(sed -n 's/^[[:space:]]*mode=//p' "${BOOT}/pico8.txt" 2>/dev/null |
+		head -1 | tr -d '\r' | sed 's/[[:space:]]*$//' | tr 'A-Z' 'a-z')
+	[ -n "$m" ] && MODE=$m
+fi
+
+case "$MODE" in
+	splore|prompt) ;;
+	*)
+		log "unknown mode='$MODE' in pico8.txt (want prompt or splore); using prompt"
+		MODE=prompt
+		;;
+esac
+
 # SDL2 has exactly two backends in this image: kmsdrm and dummy.
 export SDL_VIDEODRIVER=kmsdrm
 export HOME="${DATA}"
@@ -63,5 +81,8 @@ export HOME="${DATA}"
 # Peripherals (controllers) need a moment to enumerate before PICO-8 scans.
 sleep 1
 
-log "starting ${BIN}"
-exec "${BIN}" -home "${PICO_HOME}" -root_path "${PICO_HOME}/carts"
+set -- -home "${PICO_HOME}" -root_path "${PICO_HOME}/carts"
+[ "$MODE" = splore ] && set -- "$@" -splore
+
+log "starting ${BIN} (mode=${MODE})"
+exec "${BIN}" "$@"
