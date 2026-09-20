@@ -21,6 +21,13 @@ case "$1" in
 		wait_dev /dev/mmcblk0p1 || echo "storage: /dev/mmcblk0p1 never appeared" >&2
 		wait_dev /dev/mmcblk0p2 || echo "storage: /dev/mmcblk0p2 never appeared" >&2
 		mount -a
+		# Breadcrumb on PICO8DATA so a tester can see the card was
+		# mounted even if PICO-8 never starts.
+		if [ -d /data ]; then
+			echo "storage: mounted uptime=$(cut -d' ' -f1 /proc/uptime 2>/dev/null)" \
+				>> /data/pico8-launch.log
+			sync
+		fi
 		;;
 	stop)
 		umount /data /boot 2>/dev/null || true

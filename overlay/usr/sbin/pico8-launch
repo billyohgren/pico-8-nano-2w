@@ -14,8 +14,41 @@ set -u
 BOOT=/boot
 DATA=/data
 PICO_HOME="${DATA}/pico-8"
+LOGFILE="${DATA}/pico8-launch.log"
 
-log() { echo "pico8-launch: $*" >&2; }
+# Serial and PICO8DATA (pico8-launch.log). sync after every line so a
+# crash still leaves the last crumb on FAT. The tester pulls the card
+# and opens that file on a Mac — no serial adapter required.
+log() {
+	line="pico8-launch: $*"
+	echo "$line" >&2
+	if [ -d "${DATA}" ]; then
+		echo "$line" >> "${LOGFILE}" 2>/dev/null
+		sync
+	fi
+}
+
+dump_state() {
+	log "uptime=$(cut -d' ' -f1 /proc/uptime 2>/dev/null) cmdline=$(cat /proc/cmdline 2>/dev/null)"
+	log "mem: $(awk '/MemAvailable|MemFree|CmaTotal|CmaFree/ {printf "%s=%s ", $1, $2}' /proc/meminfo 2>/dev/null)"
+	log "dri=$(ls /dev/dri 2>/dev/null | tr '\n' ' ')"
+	if [ -d "${DATA}" ]; then
+		echo "----- dmesg -----" >> "${LOGFILE}" 2>/dev/null
+		dmesg >> "${LOGFILE}" 2>/dev/null
+		sync
+	fi
+}
+
+# Rotate before a respawn loop fills the 128 MB volume.
+if [ -f "${LOGFILE}" ]; then
+	sz=$(wc -c < "${LOGFILE}" 2>/dev/null | tr -d ' ')
+	if [ -n "$sz" ] && [ "$sz" -gt 200000 ]; then
+		mv -f "${LOGFILE}" "${LOGFILE}.old" 2>/dev/null
+	fi
+fi
+
+log "---- boot ----"
+dump_state
 
 # The folder may be called pico-8 (as shipped in Lexaloffle's zip) or pico8.
 PICO_DIR=""
@@ -27,6 +60,7 @@ if [ -z "${PICO_DIR}" ]; then
 	log "no PICO-8 found on the boot partition."
 	log "Plug the card into a computer, open the PICO8BOOT volume and copy"
 	log "the 'pico-8' folder from your Lexaloffle raspi zip onto it."
+	sleep 10
 	exit 1
 fi
 
@@ -47,12 +81,10 @@ if [ -z "${BIN}" ]; then
 	else
 		log "${PICO_DIR} contains no PICO-8 binary (looked for pico8_dyn, pico8)."
 	fi
+	sleep 10
 	exit 1
 fi
 
-# Saves, carts and config must land on the writable ext4 partition, never on
-# FAT: PICO-8 writes during play (cstore, cdata) and a power cut mid-write to
-# the boot partition is what bricks the device (PRD 7.1).
 mkdir -p "${PICO_HOME}"
 
 # Launch mode from /boot/pico8.txt (same shape as wifi.txt). CR is stripped
@@ -78,7 +110,7 @@ export SDL_VIDEODRIVER=kmsdrm
 export HOME="${DATA}"
 
 # Wait for KMS. usleep is 0.1 s; plain sleep 1 is the fallback if the
-# applet is missing. Do not exec PICO-8 without a DRM node: Mesa then
+# applet is missing. Do not start PICO-8 without a DRM node: Mesa then
 # aborts and BusyBox respawn turns that into a crash loop.
 n=0
 while [ ! -e /dev/dri/card0 ] && [ "$n" -lt 50 ]; do
@@ -87,8 +119,7 @@ while [ ! -e /dev/dri/card0 ] && [ "$n" -lt 50 ]; do
 done
 if [ ! -e /dev/dri/card0 ]; then
 	log "no /dev/dri/card0 (vc4 did not come up). not starting PICO-8."
-	log "free: $(awk '/MemAvailable|MemFree|CmaTotal|CmaFree/ {printf "%s=%s ", $1, $2}' /proc/meminfo 2>/dev/null)"
-	ls -l /dev/dri 2>/dev/null || log "no /dev/dri at all"
+	dump_state
 	sleep 10
 	exit 1
 fi
@@ -96,7 +127,27 @@ fi
 set -- -home "${PICO_HOME}" -root_path "${PICO_HOME}/carts"
 [ "$MODE" = splore ] && set -- "$@" -splore
 
-log "starting ${BIN} (mode=${MODE})"
-log "dri=$(ls /dev/dri 2>/dev/null | tr '\n' ' ')"
-log "mem: $(awk '/MemAvailable|MemFree|CmaTotal|CmaFree/ {printf "%s=%s ", $1, $2}' /proc/meminfo 2>/dev/null)"
-exec "${BIN}" "$@"
+log "starting ${BIN} (mode=${MODE}) argv: $*"
+dump_state
+
+# Do not exec: when PICO-8 exits we still want dmesg on the card.
+# Periodic sync so a hang/panic has a recent FAT flush. stderr is
+# unbuffered so Mesa/SDL errors should land before a userspace abort.
+(
+	while true; do
+		sync
+		sleep 1
+	done
+) &
+SYNCPID=$!
+
+"${BIN}" "$@" >> "${LOGFILE}" 2>&1
+rc=$?
+
+kill "${SYNCPID}" 2>/dev/null
+wait "${SYNCPID}" 2>/dev/null
+
+log "PICO-8 exited rc=${rc}"
+dump_state
+sleep 2
+exit "${rc}"
