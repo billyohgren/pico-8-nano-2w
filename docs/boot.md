@@ -59,11 +59,10 @@ up on the ramdisk.
 
 ### 2. Firmware
 
-- Boot `start_cd.elf` / `fixup_cd.dat` with `gpu_mem=16`. Cut-down
-  firmware drops camera and firmware-side 3D; KMS 3D lives in the
-  kernel, so this is the right split. `start.elf` stays on the card:
-  if HDMI audio or KMS dies, switch `start_file` / `fixup_file` /
-  `gpu_mem` in `config.txt`.
+- Boot `start.elf` / `fixup.dat` with `gpu_mem=64`. `start_cd.elf` is
+  faster (hardware beta: boot was much quicker) but PICO-8 then died
+  at first GL use — the cut-down blob drops firmware 3D. It stays on
+  the card; swapping the three lines in `config.txt` is the A/B.
 - `disable-bt` instead of `miniuart-bt`. Bluetooth is out of scope;
   this still puts the PL011 on GPIO 14/15 for serial.
 - `boot_delay=0`, `disable_splash=1`, `hdmi_force_hotplug=1`,

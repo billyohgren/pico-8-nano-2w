@@ -77,16 +77,26 @@ esac
 export SDL_VIDEODRIVER=kmsdrm
 export HOME="${DATA}"
 
-# Wait for KMS, not a fixed 1 s. USB pads hotplug; a whole second on the
-# path to first frame was a round-off error we cannot afford.
+# Wait for KMS. usleep is 0.1 s; plain sleep 1 is the fallback if the
+# applet is missing. Do not exec PICO-8 without a DRM node: Mesa then
+# aborts and BusyBox respawn turns that into a crash loop.
 n=0
-while [ ! -e /dev/dri/card0 ] && [ "$n" -lt 40 ]; do
-	sleep 0.05
+while [ ! -e /dev/dri/card0 ] && [ "$n" -lt 50 ]; do
+	usleep 100000 2>/dev/null || sleep 1
 	n=$((n + 1))
 done
+if [ ! -e /dev/dri/card0 ]; then
+	log "no /dev/dri/card0 (vc4 did not come up). not starting PICO-8."
+	log "free: $(awk '/MemAvailable|MemFree|CmaTotal|CmaFree/ {printf "%s=%s ", $1, $2}' /proc/meminfo 2>/dev/null)"
+	ls -l /dev/dri 2>/dev/null || log "no /dev/dri at all"
+	sleep 10
+	exit 1
+fi
 
 set -- -home "${PICO_HOME}" -root_path "${PICO_HOME}/carts"
 [ "$MODE" = splore ] && set -- "$@" -splore
 
 log "starting ${BIN} (mode=${MODE})"
+log "dri=$(ls /dev/dri 2>/dev/null | tr '\n' ' ')"
+log "mem: $(awk '/MemAvailable|MemFree|CmaTotal|CmaFree/ {printf "%s=%s ", $1, $2}' /proc/meminfo 2>/dev/null)"
 exec "${BIN}" "$@"
