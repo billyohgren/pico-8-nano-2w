@@ -9,9 +9,8 @@
 set -u
 set -e
 
-# Mount points for the FAT boot partition and the writable data partition.
+# Mount point for the single FAT volume.
 mkdir -p "${TARGET_DIR}/boot"
-mkdir -p "${TARGET_DIR}/data"
 
 # Overlay ships the inittab. Strip anything a package appended (getty,
 # ctrlaltdel) so the user never lands on a console (PRD 5.5).

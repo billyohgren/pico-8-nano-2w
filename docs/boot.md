@@ -40,11 +40,11 @@ know by measuring.
 - Root filesystem is `rootfs.cpio.gz`, loaded by the firmware:
   `initramfs rootfs.cpio.gz followkernel` (no `=` on that line).
 - No `root=` / `rootwait` on the kernel command line.
-- The card has **two** FAT32 volumes: PICO8BOOT (firmware, kernel,
-  initramfs, the user’s `pico-8` binary) and PICO8DATA (saves, carts).
-  There is no root partition.
-- Power-cut safety is the same as before: the OS is never written, and
-  PICO-8 still writes only to `/data`.
+- The card is **one** FAT32 volume (PICO8BOOT): firmware, kernel,
+  initramfs, pico-8 binary, carts, saves. Copy `pico8-fat-files.zip`
+  onto a FAT32 card of any size, or flash `sdcard.img`.
+- The OS is never written. PICO-8 saves on the same FAT the firmware
+  boots from (PicoPi tradeoff).
 
 gzip cpio, not a cpio baked into the kernel. Overlay changes must not
 force a kernel rebuild. The kernel has `CONFIG_BLK_DEV_INITRD` and

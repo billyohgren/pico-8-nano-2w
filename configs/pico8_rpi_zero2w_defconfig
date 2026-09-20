@@ -98,7 +98,7 @@ BR2_PACKAGE_CA_CERTIFICATES=y
 
 # Filesystem: the OS is a gzip cpio initramfs (ramdisk). The firmware
 # loads it next to the kernel; there is no root partition and no
-# rootwait. /boot and /data are both FAT32 so they mount on a Mac.
+# rootwait. One FAT32 volume holds firmware, pico-8, carts and saves.
 # gzip rather than embedding in the kernel: overlay changes must not
 # force a kernel rebuild, and CONFIG_RD_GZIP is on every bcm2709 kernel.
 BR2_TARGET_ROOTFS_CPIO=y

@@ -3,8 +3,8 @@
 # Find the user-supplied PICO-8 on the boot partition and run it.
 #
 # PICO-8 is not part of this image -- it is proprietary and cannot be
-# redistributed. The user drags their own pico-8 folder onto PICO8BOOT,
-# the firmware volume. Carts and saves live on PICO8DATA.
+# redistributed. The user drags their own pico-8 folder onto PICO8BOOT.
+# Carts, saves and the binary all live on that one FAT volume.
 #
 # Any version works: we look for the known binary names rather than a
 # pinned version, so dropping in a newer pico-8 folder just works.
@@ -12,17 +12,16 @@
 set -u
 
 BOOT=/boot
-DATA=/data
-PICO_HOME="${DATA}/pico-8"
-LOGFILE="${DATA}/pico8-launch.log"
+PICO_HOME="${BOOT}/pico-8"
+LOGFILE="${BOOT}/pico8-launch.log"
 
-# Serial and PICO8DATA (pico8-launch.log). sync after every line so a
+# Serial and PICO8BOOT (pico8-launch.log). sync after every line so a
 # crash still leaves the last crumb on FAT. The tester pulls the card
 # and opens that file on a Mac — no serial adapter required.
 log() {
 	line="pico8-launch: $*"
 	echo "$line" >&2
-	if [ -d "${DATA}" ]; then
+	if [ -d "${BOOT}" ]; then
 		echo "$line" >> "${LOGFILE}" 2>/dev/null
 		sync
 	fi
@@ -32,7 +31,7 @@ dump_state() {
 	log "uptime=$(cut -d' ' -f1 /proc/uptime 2>/dev/null) cmdline=$(cat /proc/cmdline 2>/dev/null)"
 	log "mem: $(awk '/MemAvailable|MemFree|CmaTotal|CmaFree/ {printf "%s=%s ", $1, $2}' /proc/meminfo 2>/dev/null)"
 	log "dri=$(ls /dev/dri 2>/dev/null | tr '\n' ' ')"
-	if [ -d "${DATA}" ]; then
+	if [ -d "${BOOT}" ]; then
 		echo "----- dmesg -----" >> "${LOGFILE}" 2>/dev/null
 		dmesg >> "${LOGFILE}" 2>/dev/null
 		sync
@@ -52,7 +51,7 @@ dump_state
 
 # The folder may be called pico-8 (as shipped in Lexaloffle's zip) or pico8.
 PICO_DIR=""
-for d in "${BOOT}/pico-8" "${BOOT}/pico8" "${DATA}/pico-8"; do
+for d in "${BOOT}/pico-8" "${BOOT}/pico8"; do
 	[ -d "$d" ] && { PICO_DIR="$d"; break; }
 done
 
@@ -107,7 +106,7 @@ esac
 
 # SDL2 has exactly two backends in this image: kmsdrm and dummy.
 export SDL_VIDEODRIVER=kmsdrm
-export HOME="${DATA}"
+export HOME="${BOOT}"
 
 # Wait for KMS. usleep is 0.1 s; plain sleep 1 is the fallback if the
 # applet is missing. Do not start PICO-8 without a DRM node: Mesa then

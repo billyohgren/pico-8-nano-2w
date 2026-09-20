@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# Assemble the two-partition SD card image (FAT boot + FAT data).
+# Assemble a one-partition FAT SD image, plus a zip of the same files
+# for PicoPi-style copy onto any-size FAT32 card.
 # The OS is rootfs.cpio.gz, loaded by the firmware as an initramfs.
 #
 # Derived from Buildroot's board/raspberrypi/post-image.sh (GPL-2.0-or-later):
@@ -29,13 +30,11 @@ fi
 if [ ! -f "${BINARIES_DIR}/rpi-firmware/pico8.txt" ]; then
 	cp "${BOARD_DIR}/pico8.txt" "${BINARIES_DIR}/rpi-firmware/pico8.txt"
 fi
-mkdir -p "${BINARIES_DIR}/rpi-firmware/carts"
-# Live cart directory on PICO8DATA. Basename "pico-8" is what genimage
-# writes onto the volume. The README keeps the otherwise-empty folder
-# in the FAT image (mcopy skips empty dirs).
-mkdir -p "${BINARIES_DIR}/data-skel/pico-8/carts"
+# Live cart directory on the same volume as the binary. The README keeps
+# the otherwise-empty folder in the FAT image (mcopy skips empty dirs).
+mkdir -p "${BINARIES_DIR}/pico-8/carts"
 printf '%s\n' 'Drop .p8 and .p8.png carts here.' \
-	> "${BINARIES_DIR}/data-skel/pico-8/carts/README.txt"
+	> "${BINARIES_DIR}/pico-8/carts/README.txt"
 
 CPIO="${BINARIES_DIR}/rootfs.cpio.gz"
 if [ ! -f "${CPIO}" ]; then
@@ -48,6 +47,7 @@ FILES=()
 for i in "${BINARIES_DIR}"/*.dtb "${BINARIES_DIR}"/rpi-firmware/*; do
 	FILES+=( "${i#"${BINARIES_DIR}"/}" )
 done
+FILES+=( "pico-8" )
 
 KERNEL=$(sed -n 's/^kernel=//p' "${BINARIES_DIR}/rpi-firmware/config.txt")
 FILES+=( "${KERNEL}" )
@@ -69,4 +69,33 @@ genimage \
 	--outputpath "${BINARIES_DIR}" \
 	--config "${GENIMAGE_CFG}"
 
-exit $?
+# Same files as the FAT volume, for copy-install onto any-size card
+# (PicoPi style). Names match the volume root, not rpi-firmware/.
+STAGE="${BINARIES_DIR}/fat-root"
+rm -rf "${STAGE}"
+mkdir -p "${STAGE}"
+cp "${BINARIES_DIR}/${KERNEL}" "${STAGE}/"
+cp "${BINARIES_DIR}"/*.dtb "${STAGE}/"
+for i in "${BINARIES_DIR}"/rpi-firmware/*; do
+	base="$(basename "${i}")"
+	[ "${base}" = "carts" ] && continue
+	if [ -d "${i}" ]; then
+		cp -a "${i}" "${STAGE}/${base}"
+	else
+		cp "${i}" "${STAGE}/${base}"
+	fi
+done
+mkdir -p "${STAGE}/pico-8/carts"
+cp "${BINARIES_DIR}/pico-8/carts/README.txt" "${STAGE}/pico-8/carts/"
+
+python3 - "${STAGE}" "${BINARIES_DIR}/pico8-fat-files.zip" <<'PY'
+import os, sys, zipfile
+root, zpath = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+    for dirpath, _, files in os.walk(root):
+        for name in files:
+            full = os.path.join(dirpath, name)
+            z.write(full, os.path.relpath(full, root))
+PY
+
+exit 0

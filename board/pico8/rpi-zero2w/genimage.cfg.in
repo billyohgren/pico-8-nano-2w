@@ -1,23 +1,22 @@
-# Two-partition layout:
+# One FAT32 partition, PicoPi-style.
 #
-#   p1  FAT32  PICO8BOOT  /boot  read-only at runtime
-#       firmware, kernel, initramfs, wifi.txt, pico8.txt, the pico-8 binary
-#   p2  FAT32  PICO8DATA  /data  read-write
-#       carts, saves, PICO-8 config, ssh host keys
+#   p1  FAT32  PICO8BOOT  /boot  read-write
+#       firmware, kernel, initramfs, wifi.txt, pico8.txt, pico-8 binary,
+#       carts, saves, ssh keys
 #
-# Both volumes appear on a Mac or Windows machine. p1 is never written
-# while PICO-8 runs, so a power cut cannot brick the firmware. p2 has no
-# journal: a mid-write pull can lose saves, not the OS.
+# The OS is the initramfs (RAM). The card is only this volume. Format any
+# size SD as FAT32 and copy the files from pico8-fat-files.zip onto it —
+# that is how a 32 GB card stays 32 GB. sdcard.img exists for Raspberry
+# Pi Imager; it is a 256 M card image, not a ceiling.
 #
-# The OS is the initramfs. There is no root partition.
-#
-# Boot is 192M because it has to hold gzip(rootfs) plus the user's pico-8
-# folder. Empty FAT zeros zip off the image.
+# PICO-8 writes saves here. FAT has no journal, so a power cut mid-save
+# can scramble the volume (including firmware). That is the PicoPi
+# tradeoff: most carts never save, and testers would rather copy files
+# than reflash a two-partition image.
 #
 # The boot file list below is filled in by post-image.sh from whatever the
-# firmware package actually installed, so it never has to be maintained by
-# hand. Do not write the placeholder token anywhere else in this file --
-# sed replaces every occurrence, including ones inside comments.
+# firmware package actually installed. Do not write the placeholder token
+# anywhere else in this file -- sed replaces every occurrence.
 
 image boot.vfat {
 	vfat {
@@ -28,21 +27,7 @@ image boot.vfat {
 		}
 	}
 
-	size = 192M
-}
-
-# Live carts/saves. pico-8/carts is created empty so the volume is obvious
-# when you plug the card into a Mac. Keep this small; empty FAT zips off.
-image data.vfat {
-	vfat {
-		label = "PICO8DATA"
-		extraargs = "-F 32"
-		files = {
-			"data-skel/pico-8"
-		}
-	}
-
-	size = 128M
+	size = 256M
 }
 
 image sdcard.img {
@@ -53,10 +38,5 @@ image sdcard.img {
 		partition-type = 0xC
 		bootable = "true"
 		image = "boot.vfat"
-	}
-
-	partition data {
-		partition-type = 0xC
-		image = "data.vfat"
 	}
 }

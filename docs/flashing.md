@@ -32,16 +32,18 @@ sudo dd if=output/sdcard.img of=/dev/rdisk4 bs=4m
 diskutil eject /dev/disk4
 ```
 
-Two macOS details: use `/dev/rdisk4` rather than `/dev/disk4` — the raw device
-is far faster — and press **Ctrl-T** for progress, because BSD `dd` has no
-`status=progress`. Check the disk number carefully; `dd` to the wrong one
-destroys it.
+**Preferred (PicoPi-style):** format the card as one FAT32 volume of any size
+and unzip `output/pico8-fat-files.zip` onto it. A 32 GB card stays 32 GB.
+`sdcard.img` is a 256 MB Imager convenience image, not a size cap.
+
+Two macOS details for `dd`: use `/dev/rdisk4` rather than `/dev/disk4` — the
+raw device is far faster — and press **Ctrl-T** for progress, because BSD `dd`
+has no `status=progress`. Check the disk number carefully; `dd` to the wrong
+one destroys it.
 
 ## 3. Add PICO-8
 
-Take the card out and plug it back in. A volume called **PICO8BOOT** appears —
-this is the FAT boot partition, and it is the only one macOS and Windows can
-read.
+Take the card out and plug it back in. A volume called **PICO8BOOT** appears.
 
 Open your `pico-8_<version>_raspi.zip` and copy the whole **`pico-8` folder**
 onto PICO8BOOT, so you end up with:
@@ -121,7 +123,7 @@ Copy your public key to the boot partition as `authorized_keys`:
 cp ~/.ssh/id_ed25519.pub /Volumes/PICO8BOOT/authorized_keys
 ```
 
-On first boot the device generates its own host keys onto `/data` and keeps
+On first boot the device generates its own host keys onto `/boot/ssh` and keeps
 them, so the fingerprint stays stable. Root login is by key only — there is no
 password.
 
@@ -142,10 +144,8 @@ init's `respawn`, so if it exits it is restarted immediately — you should
 never land on a shell.
 
 The OS is a ramdisk (`rootfs.cpio.gz` on PICO8BOOT). Carts and saves live
-on the second volume, **PICO8DATA**. Drop `.p8` / `.p8.png` files into
-`pico-8/carts` on that volume. PICO-8 writes saves there too. A power cut
-mid-write can corrupt PICO8DATA (FAT has no journal); it cannot brick
-PICO8BOOT, which is mounted read-only.
+in `pico-8/carts` on the same volume. A power cut mid-save can scramble
+the FAT (firmware included). Most carts never save.
 
 Launch mode (`pico8.txt`) and boot-time choices are in
 [docs/boot.md](boot.md).
@@ -172,11 +172,7 @@ pico8-launch: found only pico8_64, which is 64-bit ...
 
 - **No mDNS.** `pico8.local` does not resolve; you need the IP address (PRD
   8.3). This is the main thing standing between you and `scp game.p8 pico8:`.
-- **PICO8DATA does not auto-resize.** It is a fixed 128 MB and does not grow
-  to fill the card. Fine for a large cart library, but the rest of the card
-  is unused.
-- **Carts go on PICO8DATA.** Copy `.p8` files into `pico-8/carts` on that
-  volume. The `carts/` folder on PICO8BOOT is not imported.
-- **Never booted on hardware.** Everything here is verified by inspecting the
-  built image, not by running it. Treat the first boot as a test, and bring a
-  serial adapter.
+- **Copy-install uses the whole card.** Unzip `pico8-fat-files.zip` onto a
+  FAT32 volume of any size. `sdcard.img` is 256 MB if you flash it with Imager.
+- **BusyBox wget has no HTTPS**, so Splore cannot fetch BBS carts yet.
+- **HDMI audio is off** so KMS can probe. A Zero 2 W has no analog jack.

@@ -34,7 +34,7 @@
 # CONFIG_CAN is not set
 # CONFIG_NFC is not set
 
-# Filesystems we will never mount. The card is two FAT32 volumes; the OS is a ramdisk.
+# Filesystems we will never mount. The card is one FAT32 volume; the OS is a ramdisk.
 # CONFIG_BCACHEFS_FS is not set
 # CONFIG_BTRFS_FS is not set
 # CONFIG_XFS_FS is not set

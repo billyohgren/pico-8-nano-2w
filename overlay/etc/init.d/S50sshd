@@ -2,19 +2,17 @@
 #
 # OpenSSH with the OS in a ramdisk (PRD 5.6, 7, 9).
 #
-# Host keys must persist across boots, so they live on /data. That volume
-# is FAT32: chmod is cosmetic, and the vfat umask=077 in fstab is what
-# makes the keys look like 0600 to sshd. authorized_keys is still dropped
-# on PICO8BOOT, the same as wifi.txt.
+# Host keys persist on the FAT volume. chmod is cosmetic; umask=077 in
+# fstab is what makes them look like 0600 to sshd. authorized_keys is
+# dropped next to wifi.txt.
 
-KEYDIR=/data/ssh
-AUTH="$KEYDIR/authorized_keys"
-BOOT_AUTH=/boot/authorized_keys
+KEYDIR=/boot/ssh
+AUTH=/boot/authorized_keys
 
 start() {
 	printf 'Starting sshd: '
 
-	mkdir -p "$KEYDIR" || { echo "FAIL (no /data)"; return 1; }
+	mkdir -p "$KEYDIR" || { echo "FAIL (no /boot)"; return 1; }
 	chmod 0700 "$KEYDIR"
 
 	# Generated once, on first boot, then kept. Regenerating every boot would
@@ -29,9 +27,9 @@ start() {
 		fi
 	done
 
-	# The user drops their public key onto PICO8BOOT (PRD 7).
-	if [ -f "$BOOT_AUTH" ]; then
-		cp "$BOOT_AUTH" "$AUTH" 2>/dev/null && chmod 0600 "$AUTH"
+	# The user drops their public key onto PICO8BOOT as authorized_keys.
+	if [ -f "$AUTH" ]; then
+		chmod 0600 "$AUTH" 2>/dev/null || true
 	fi
 
 	/usr/sbin/sshd \

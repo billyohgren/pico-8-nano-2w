@@ -3,10 +3,10 @@
 A PICO-8 console image for the Raspberry Pi Zero 2 W. Power on, PICO-8 comes
 up fullscreen. No desktop, no login prompt, no shell.
 
-> **Status: never booted on real hardware.** Everything here is verified by
-> inspecting the built image. Treat the first boot as a test and bring a USB
-> serial adapter — there is no console on the device, so a black screen tells
-> you nothing on its own.
+> **Status: hardware beta.** Testers have booted this; KMS and PICO-8 start.
+> Bring a USB serial adapter for the first boot if you can — there is no
+> getty, so a black screen tells you nothing on its own. `pico8-launch.log`
+> on the FAT volume is the fallback.
 
 ## PICO-8 is not included
 
@@ -20,15 +20,14 @@ proprietary, the image itself is freely redistributable.
 
 ## Quick start
 
-Grab `sdcard.img` from the [latest release](../../releases), or build it
-yourself (see below), then:
+Preferred, PicoPi-style: format the card as **one FAT32 volume of any size**,
+unzip `pico8-fat-files.zip` from the [latest release](../../releases) onto it,
+then:
 
-1. Write it to a card — Raspberry Pi Imager, "Use custom".
-2. Re-insert the card. A **PICO8BOOT** volume appears.
-3. Copy the `pico-8` folder out of your `pico-8_<version>_raspi.zip` onto it.
+1. Copy the `pico-8` folder out of your `pico-8_<version>_raspi.zip` onto it.
    Any version works; nothing is pinned. It must contain `pico8_dyn` — the
    64-bit `pico8_64` will not run on this 32-bit userland.
-4. Edit `wifi.txt` on the same volume:
+2. Edit `wifi.txt` on the same volume:
 
    ```
    ssid=MyNetwork
@@ -38,10 +37,13 @@ yourself (see below), then:
 
    `country=` is required. Without a regulatory domain the radio does not know
    which channels are legal where you are and will not transmit.
-5. Optionally edit `pico8.txt` on the same volume and set `mode=splore` to
-   boot into Splore (the cartridge browser) instead of the command prompt.
-6. Optionally copy your SSH public key there as `authorized_keys`.
-7. Boot with HDMI and a USB keyboard.
+3. Optionally edit `pico8.txt` and set `mode=splore` to boot into Splore.
+4. Optionally copy your SSH public key there as `authorized_keys`.
+5. Drop carts into `pico-8/carts`.
+6. Boot with HDMI and a USB keyboard.
+
+`sdcard.img` is still there for Raspberry Pi Imager; it is a 256 MB card
+image, not a limit. The zip is how a 32 GB card stays 32 GB.
 
 Full detail, including serial console setup, is in [docs/flashing.md](docs/flashing.md).
 
@@ -68,17 +70,17 @@ The build needs nothing from Lexaloffle.
 - Buildroot 2026.02.3, pinned as an unmodified submodule
 - Linux 6.12, 32-bit armhf, glibc — the ABI Lexaloffle's binary expects
 - SDL2 on KMSDRM with Mesa vc4. No X11, no Wayland, no framebuffer
-- Two FAT32 volumes: **PICO8BOOT** (firmware, kernel, initramfs, the pico-8
-  binary) and **PICO8DATA** (carts, saves). Both mount on a Mac. The OS
-  runs from RAM; there is no root partition on the card
+- One FAT32 volume (**PICO8BOOT**): firmware, kernel, initramfs, the pico-8
+  binary, carts, saves. The OS runs from RAM. Copy the files onto a FAT32
+  card of any size (PicoPi-style), or flash `sdcard.img`
 - PICO-8 under a respawning supervisor; no getty on any tty
 - Wi-Fi provisioned from a text file on the FAT partition, brought up in the
   background so it can never delay PICO-8 starting
 
-The OS lives in a ramdisk, so a power cut cannot corrupt it. PICO-8 writes
-only to PICO8DATA. A power cut mid-save can lose carts on that volume
-(FAT has no journal); it cannot brick the firmware on PICO8BOOT, which is
-mounted read-only.
+The OS lives in a ramdisk, so a power cut cannot corrupt the OS itself.
+PICO-8 writes saves onto the same FAT volume the firmware boots from.
+A power cut mid-save can scramble that volume (PicoPi made the same
+tradeoff: most carts never save).
 
 Boot time is discussed in [docs/boot.md](docs/boot.md): the ramdisk removes
 `rootwait`, and init no longer waits for Wi-Fi or `ssh-keygen` before
@@ -87,9 +89,8 @@ PICO-8. The closed GPU firmware is still most of a 3 s budget.
 ## Known gaps
 
 - No mDNS, so `pico8.local` does not resolve. Find the IP on your router.
-- PICO8DATA is a fixed 128 MB and does not grow to fill the card.
-- Drop carts into `pico-8/carts` on the **PICO8DATA** volume. The
-  `carts/` folder on PICO8BOOT is not imported.
+- BusyBox wget has no HTTPS yet, so Splore cannot download BBS carts.
+- HDMI audio is off (`noaudio`) so KMS can probe; analog jack does not exist on a Zero 2 W.
 
 ## Credits
 
