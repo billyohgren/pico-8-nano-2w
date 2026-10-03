@@ -1,0 +1,486 @@
+From ebba80b4872d54602b0725e2a392601faebb8eed Mon Sep 17 00:00:00 2001
+From: Billy Ohgren <hi@billy.nu>
+Date: Sat, 3 Oct 2026 11:20:24 +0200
+Subject: [PATCH] kmsdrm: rotate output by 90 or 270 degrees
+ (SDL_KMSDRM_ROTATE)
+
+Some panels scan out portrait but are mounted landscape, e.g. the 240x320
+LCD in the Retroflag GPi Case. Legacy Pi firmware rotated them; vc4 KMS
+planes can only flip, so turn the picture in GL instead.
+
+With SDL_KMSDRM_ROTATE=90 or 270, modes and windows report width and
+height swapped. The app draws into an offscreen framebuffer (what
+glBindFramebuffer(0) from SDL_GL_GetProcAddress binds), and SwapWindow
+draws it turned onto the real surface from a second, texture-sharing
+context so the app's GL state is never touched.
+
+Signed-off-by: Billy Ohgren <hi@billy.nu>
+---
+ src/video/kmsdrm/SDL_kmsdrmopengles.c | 323 +++++++++++++++++++++++++-
+ src/video/kmsdrm/SDL_kmsdrmopengles.h |   8 +-
+ src/video/kmsdrm/SDL_kmsdrmvideo.c    |  28 ++-
+ 3 files changed, 345 insertions(+), 14 deletions(-)
+
+diff --git a/src/video/kmsdrm/SDL_kmsdrmopengles.c b/src/video/kmsdrm/SDL_kmsdrmopengles.c
+index 3115862..0265252 100644
+--- a/src/video/kmsdrm/SDL_kmsdrmopengles.c
++++ b/src/video/kmsdrm/SDL_kmsdrmopengles.c
+@@ -29,6 +29,7 @@
+ #include "SDL_kmsdrmvideo.h"
+ #include "SDL_kmsdrmopengles.h"
+ #include "SDL_kmsdrmdyn.h"
++#include "SDL_opengles2.h"
+ #include <errno.h>
+ 
+ #ifndef EGL_PLATFORM_GBM_MESA
+@@ -68,9 +69,322 @@ void KMSDRM_GLES_UnloadLibrary(_THIS)
+        so we manually unload the library whenever we want. */
+ }
+ 
+-SDL_EGL_CreateContext_impl(KMSDRM)
++/* Output rotation, for panels that scan out portrait but are mounted
++   landscape (Retroflag GPi Case: a 240x320 panel shown as 320x240).
++   vc4 planes can only flip, not turn by 90 degrees, so it is done in GL.
++
++   SDL_KMSDRM_ROTATE=90 or 270 turns the picture that many degrees
++   clockwise. The app is told the mode is the rotated size and draws into
++   an offscreen framebuffer: glBindFramebuffer(0) from SDL_GL_GetProcAddress
++   lands there instead of on the window. SwapWindow then draws that
++   framebuffer's texture, turned, onto the real surface from a second
++   context that shares textures with the app's, so none of the app's GL
++   state is touched. Apps that link glBindFramebuffer directly instead of
++   asking SDL for it bypass this. The hardware cursor is not rotated. */
++
++#define ROT_GL_FUNCS                                                                       \
++    ROT_GL(void, ActiveTexture, (GLenum))                                                  \
++    ROT_GL(void, AttachShader, (GLuint, GLuint))                                           \
++    ROT_GL(void, BindAttribLocation, (GLuint, GLuint, const GLchar *))                     \
++    ROT_GL(void, BindFramebuffer, (GLenum, GLuint))                                        \
++    ROT_GL(void, BindRenderbuffer, (GLenum, GLuint))                                       \
++    ROT_GL(void, BindTexture, (GLenum, GLuint))                                            \
++    ROT_GL(GLenum, CheckFramebufferStatus, (GLenum))                                       \
++    ROT_GL(void, CompileShader, (GLuint))                                                  \
++    ROT_GL(GLuint, CreateProgram, (void))                                                  \
++    ROT_GL(GLuint, CreateShader, (GLenum))                                                 \
++    ROT_GL(void, DrawArrays, (GLenum, GLint, GLsizei))                                     \
++    ROT_GL(void, EnableVertexAttribArray, (GLuint))                                        \
++    ROT_GL(void, FramebufferRenderbuffer, (GLenum, GLenum, GLenum, GLuint))                \
++    ROT_GL(void, FramebufferTexture2D, (GLenum, GLenum, GLenum, GLuint, GLint))            \
++    ROT_GL(void, GenFramebuffers, (GLsizei, GLuint *))                                     \
++    ROT_GL(void, GenRenderbuffers, (GLsizei, GLuint *))                                    \
++    ROT_GL(void, GenTextures, (GLsizei, GLuint *))                                         \
++    ROT_GL(void, GetIntegerv, (GLenum, GLint *))                                           \
++    ROT_GL(void, GetProgramiv, (GLuint, GLenum, GLint *))                                  \
++    ROT_GL(void, GetShaderiv, (GLuint, GLenum, GLint *))                                   \
++    ROT_GL(void, LinkProgram, (GLuint))                                                    \
++    ROT_GL(void, RenderbufferStorage, (GLenum, GLenum, GLsizei, GLsizei))                  \
++    ROT_GL(void, ShaderSource, (GLuint, GLsizei, const GLchar *const *, const GLint *))    \
++    ROT_GL(void, TexImage2D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *)) \
++    ROT_GL(void, TexParameteri, (GLenum, GLenum, GLint))                                   \
++    ROT_GL(void, UseProgram, (GLuint))                                                     \
++    ROT_GL(void, VertexAttribPointer, (GLuint, GLint, GLenum, GLboolean, GLsizei, const void *)) \
++    ROT_GL(void, Viewport, (GLint, GLint, GLsizei, GLsizei))
++
++typedef struct KMSDRM_Rotation
++{
++    SDL_bool loaded;
++    EGLContext app_context;  /* owns fbo, tex and depth */
++    EGLContext blit_context; /* shares app_context's textures */
++    GLuint fbo, tex, depth;
++    int w, h; /* rotated size the fbo was last allocated at */
++    GLuint program;
++#define ROT_GL(ret, name, args) ret(GL_APIENTRY *name) args;
++    ROT_GL_FUNCS
++#undef ROT_GL
++} KMSDRM_Rotation;
++
++static KMSDRM_Rotation rot;
++static int rot_degrees = -1; /* -1 until the environment has been read */
++
++int KMSDRM_GLES_GetRotation(void)
++{
++    if (rot_degrees < 0) {
++        const char *env = SDL_getenv("SDL_KMSDRM_ROTATE");
++        int degrees = env ? SDL_atoi(env) : 0;
++        rot_degrees = (degrees == 90 || degrees == 270) ? degrees : 0;
++    }
++    return rot_degrees;
++}
++
++static SDL_bool KMSDRM_RotLoad(_THIS)
++{
++    if (rot.loaded) {
++        return SDL_TRUE;
++    }
++#define ROT_GL(ret, name, args)                                                     \
++    rot.name = (ret(GL_APIENTRY *) args)SDL_EGL_GetProcAddress(_this, "gl" #name); \
++    if (!rot.name) {                                                                \
++        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "KMSDRM rotate: no gl" #name);         \
++        return SDL_FALSE;                                                           \
++    }
++    ROT_GL_FUNCS
++#undef ROT_GL
++    rot.loaded = SDL_TRUE;
++    return SDL_TRUE;
++}
++
++/* What the app gets for glBindFramebuffer: 0 means "the window", which
++   while rotating is our framebuffer. */
++static void GL_APIENTRY KMSDRM_RotBindFramebuffer(GLenum target, GLuint framebuffer)
++{
++    if (framebuffer == 0 && rot.fbo &&
++        (EGLContext)SDL_GL_GetCurrentContext() == rot.app_context) {
++        framebuffer = rot.fbo;
++    }
++    rot.BindFramebuffer(target, framebuffer);
++}
++
++/* Forget the app context's objects. They go when that context is deleted;
++   if it is merely swapped for another, one small framebuffer leaks. */
++static void KMSDRM_RotRelease(_THIS)
++{
++    if (rot.blit_context != EGL_NO_CONTEXT) {
++        _this->egl_data->eglDestroyContext(_this->egl_data->egl_display, rot.blit_context);
++    }
++    rot.app_context = EGL_NO_CONTEXT;
++    rot.blit_context = EGL_NO_CONTEXT;
++    rot.fbo = rot.tex = rot.depth = 0;
++    rot.w = rot.h = 0;
++    rot.program = 0;
++}
++
++/* With 'context' current on the window's surface: make sure the offscreen
++   framebuffer exists at the window's rotated size. */
++static void KMSDRM_RotSetup(_THIS, SDL_Window *window, EGLContext context)
++{
++    SDL_DisplayData *dispdata = (SDL_DisplayData *)SDL_GetDisplayForWindow(window)->driverdata;
++    int w = dispdata->mode.vdisplay;
++    int h = dispdata->mode.hdisplay;
++    GLint prev_fbo, prev_tex, prev_rb;
++    SDL_bool fresh = SDL_FALSE;
++
++    if (!KMSDRM_GLES_GetRotation() || context == EGL_NO_CONTEXT || !KMSDRM_RotLoad(_this)) {
++        return;
++    }
++
++    if (context != rot.app_context) {
++        static const EGLint attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
++
++        KMSDRM_RotRelease(_this);
++        rot.app_context = context;
++        rot.blit_context = _this->egl_data->eglCreateContext(_this->egl_data->egl_display,
++                                                             _this->egl_data->egl_config,
++                                                             context, attribs);
++        if (rot.blit_context == EGL_NO_CONTEXT) {
++            SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "KMSDRM rotate: could not create blit context");
++        }
++        rot.GenFramebuffers(1, &rot.fbo);
++        rot.GenTextures(1, &rot.tex);
++        if (_this->gl_config.depth_size > 0) {
++            rot.GenRenderbuffers(1, &rot.depth);
++        }
++        fresh = SDL_TRUE;
++    }
++
++    if (rot.w == w && rot.h == h) {
++        return;
++    }
++
++    rot.GetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
++    rot.GetIntegerv(GL_TEXTURE_BINDING_2D, &prev_tex);
++
++    rot.BindTexture(GL_TEXTURE_2D, rot.tex);
++    rot.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
++    /* One texel per screen pixel, just transposed: no filtering needed. */
++    rot.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
++    rot.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
++    rot.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
++    rot.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
++    rot.BindTexture(GL_TEXTURE_2D, (GLuint)prev_tex);
++
++    rot.BindFramebuffer(GL_FRAMEBUFFER, rot.fbo);
++    rot.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, rot.tex, 0);
++    if (rot.depth) {
++        rot.GetIntegerv(GL_RENDERBUFFER_BINDING, &prev_rb);
++        rot.BindRenderbuffer(GL_RENDERBUFFER, rot.depth);
++        rot.RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, w, h);
++        rot.BindRenderbuffer(GL_RENDERBUFFER, (GLuint)prev_rb);
++        rot.FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rot.depth);
++    }
++    if (rot.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
++        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "KMSDRM rotate: %dx%d framebuffer incomplete", w, h);
++    }
++
++    /* "The window" was bound (or nothing yet, on a fresh context): keep
++       ours bound in its place. Otherwise give the app back its own. */
++    if (prev_fbo != 0 && (GLuint)prev_fbo != rot.fbo) {
++        rot.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev_fbo);
++    }
++    /* A fresh context's viewport is the real surface size; the app may
++       never set one. */
++    if (fresh) {
++        rot.Viewport(0, 0, w, h);
++    }
++
++    rot.w = w;
++    rot.h = h;
++}
++
++static GLuint KMSDRM_RotCompile(GLenum type, const char *src)
++{
++    GLuint shader = rot.CreateShader(type);
++    GLint ok = GL_FALSE;
++
++    rot.ShaderSource(shader, 1, &src, NULL);
++    rot.CompileShader(shader);
++    rot.GetShaderiv(shader, GL_COMPILE_STATUS, &ok);
++    return ok ? shader : 0;
++}
++
++/* First use of the blit context: program and vertex arrays. This state is
++   the blit context's alone, so it is set once and left alone. */
++static SDL_bool KMSDRM_RotInitBlit(void)
++{
++    static const char *vs =
++        "attribute vec2 a_pos;\n"
++        "attribute vec2 a_tc;\n"
++        "varying vec2 v_tc;\n"
++        "void main() { v_tc = a_tc; gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
++    static const char *fs =
++        "precision mediump float;\n"
++        "varying vec2 v_tc;\n"
++        "uniform sampler2D u_tex;\n"
++        "void main() { gl_FragColor = texture2D(u_tex, v_tc); }\n";
++    /* Screen corners as a strip, with the texture coordinate each one
++       shows. Clockwise by 90: the picture's top-left lands top-right. */
++    static const GLfloat pos[] = { -1, -1, 1, -1, -1, 1, 1, 1 };
++    static const GLfloat tc90[] = { 1, 0, 1, 1, 0, 0, 0, 1 };
++    static const GLfloat tc270[] = { 0, 1, 0, 0, 1, 1, 1, 0 };
++    GLuint v = KMSDRM_RotCompile(GL_VERTEX_SHADER, vs);
++    GLuint f = KMSDRM_RotCompile(GL_FRAGMENT_SHADER, fs);
++    GLint ok = GL_FALSE;
++
++    if (!v || !f) {
++        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "KMSDRM rotate: shader compile failed");
++        return SDL_FALSE;
++    }
++    rot.program = rot.CreateProgram();
++    rot.AttachShader(rot.program, v);
++    rot.AttachShader(rot.program, f);
++    rot.BindAttribLocation(rot.program, 0, "a_pos");
++    rot.BindAttribLocation(rot.program, 1, "a_tc");
++    rot.LinkProgram(rot.program);
++    rot.GetProgramiv(rot.program, GL_LINK_STATUS, &ok);
++    if (!ok) {
++        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "KMSDRM rotate: shader link failed");
++        rot.program = 0;
++        return SDL_FALSE;
++    }
++    rot.UseProgram(rot.program);
++    rot.ActiveTexture(GL_TEXTURE0);
++    rot.VertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, pos);
++    rot.VertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, rot_degrees == 90 ? tc90 : tc270);
++    rot.EnableVertexAttribArray(0);
++    rot.EnableVertexAttribArray(1);
++    return SDL_TRUE;
++}
++
++/* Draw the app's frame, turned, onto the window surface's back buffer.
++   Switching contexts flushes the app's rendering first. */
++static void KMSDRM_RotBlit(_THIS, SDL_Window *window, EGLSurface surface)
++{
++    SDL_DisplayData *dispdata = (SDL_DisplayData *)SDL_GetDisplayForWindow(window)->driverdata;
++    EGLContext context = (EGLContext)SDL_GL_GetCurrentContext();
++    EGLDisplay display = _this->egl_data->egl_display;
++
++    if (!KMSDRM_GLES_GetRotation() || context == EGL_NO_CONTEXT) {
++        return;
++    }
++    KMSDRM_RotSetup(_this, window, context);
++    if (rot.blit_context == EGL_NO_CONTEXT) {
++        return;
++    }
++    if (!_this->egl_data->eglMakeCurrent(display, surface, surface, rot.blit_context)) {
++        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "KMSDRM rotate: could not switch to blit context");
++        return;
++    }
++    if (rot.program || KMSDRM_RotInitBlit()) {
++        rot.BindFramebuffer(GL_FRAMEBUFFER, 0);
++        rot.Viewport(0, 0, dispdata->mode.hdisplay, dispdata->mode.vdisplay);
++        rot.BindTexture(GL_TEXTURE_2D, rot.tex);
++        rot.DrawArrays(GL_TRIANGLE_STRIP, 0, 4);
++    }
++    _this->egl_data->eglMakeCurrent(display, surface, surface, context);
++}
++
++void *KMSDRM_GLES_GetProcAddress(_THIS, const char *proc)
++{
++    void *func = SDL_EGL_GetProcAddress(_this, proc);
+ 
+-    int KMSDRM_GLES_SetSwapInterval(_THIS, int interval)
++    if (func && KMSDRM_GLES_GetRotation() && SDL_strcmp(proc, "glBindFramebuffer") == 0 &&
++        KMSDRM_RotLoad(_this)) {
++        return (void *)KMSDRM_RotBindFramebuffer;
++    }
++    return func;
++}
++
++SDL_GLContext KMSDRM_GLES_CreateContext(_THIS, SDL_Window *window)
++{
++    SDL_GLContext context = SDL_EGL_CreateContext(_this, ((SDL_WindowData *)window->driverdata)->egl_surface);
++
++    /* SDL_EGL_CreateContext leaves the new context current. */
++    if (context) {
++        KMSDRM_RotSetup(_this, window, (EGLContext)context);
++    }
++    return context;
++}
++
++int KMSDRM_GLES_MakeCurrent(_THIS, SDL_Window *window, SDL_GLContext context)
++{
++    int ret = SDL_EGL_MakeCurrent(_this, window ? ((SDL_WindowData *)window->driverdata)->egl_surface : EGL_NO_SURFACE, context);
++
++    if (ret == 0 && window && context) {
++        KMSDRM_RotSetup(_this, window, (EGLContext)context);
++    }
++    return ret;
++}
++
++void KMSDRM_GLES_DeleteContext(_THIS, SDL_GLContext context)
++{
++    if (context && (EGLContext)context == rot.app_context) {
++        KMSDRM_RotRelease(_this);
++    }
++    SDL_EGL_DeleteContext(_this, context);
++}
++
++int KMSDRM_GLES_SetSwapInterval(_THIS, int interval)
+ {
+ 
+     if (!_this->egl_data) {
+@@ -110,6 +424,9 @@ int KMSDRM_GLES_SwapWindow(_THIS, SDL_Window *window)
+         KMSDRM_CreateSurfaces(_this, window);
+     }
+ 
++    /* SDL_KMSDRM_ROTATE: the app drew offscreen; put it on the surface. */
++    KMSDRM_RotBlit(_this, window, windata->egl_surface);
++
+     /* Wait for confirmation that the next front buffer has been flipped, at which
+        point the previous front buffer can be released */
+     if (!KMSDRM_WaitPageflip(_this, windata)) {
+@@ -207,8 +524,6 @@ int KMSDRM_GLES_SwapWindow(_THIS, SDL_Window *window)
+     return 1;
+ }
+ 
+-SDL_EGL_MakeCurrent_impl(KMSDRM)
+-
+ #endif /* SDL_VIDEO_DRIVER_KMSDRM */
+ 
+     /* vi: set ts=4 sw=4 expandtab: */
+diff --git a/src/video/kmsdrm/SDL_kmsdrmopengles.h b/src/video/kmsdrm/SDL_kmsdrmopengles.h
+index 9307066..c15d32a 100644
+--- a/src/video/kmsdrm/SDL_kmsdrmopengles.h
++++ b/src/video/kmsdrm/SDL_kmsdrmopengles.h
+@@ -30,8 +30,6 @@
+ 
+ /* OpenGLES functions */
+ #define KMSDRM_GLES_GetAttribute SDL_EGL_GetAttribute
+-#define KMSDRM_GLES_GetProcAddress SDL_EGL_GetProcAddress
+-#define KMSDRM_GLES_DeleteContext SDL_EGL_DeleteContext
+ #define KMSDRM_GLES_GetSwapInterval SDL_EGL_GetSwapInterval
+ 
+ extern void KMSDRM_GLES_DefaultProfileConfig(_THIS, int *mask, int *major, int *minor);
+@@ -40,6 +38,12 @@ extern int KMSDRM_GLES_LoadLibrary(_THIS, const char *path);
+ extern SDL_GLContext KMSDRM_GLES_CreateContext(_THIS, SDL_Window *window);
+ extern int KMSDRM_GLES_SwapWindow(_THIS, SDL_Window *window);
+ extern int KMSDRM_GLES_MakeCurrent(_THIS, SDL_Window *window, SDL_GLContext context);
++extern void *KMSDRM_GLES_GetProcAddress(_THIS, const char *proc);
++extern void KMSDRM_GLES_DeleteContext(_THIS, SDL_GLContext context);
++
++/* SDL_KMSDRM_ROTATE=90 or 270: 0 otherwise. When set, modes and windows
++   report width and height swapped and SwapWindow turns the picture. */
++extern int KMSDRM_GLES_GetRotation(void);
+ 
+ #endif /* SDL_VIDEO_DRIVER_KMSDRM */
+ 
+diff --git a/src/video/kmsdrm/SDL_kmsdrmvideo.c b/src/video/kmsdrm/SDL_kmsdrmvideo.c
+index 8f080c2..887af36 100644
+--- a/src/video/kmsdrm/SDL_kmsdrmvideo.c
++++ b/src/video/kmsdrm/SDL_kmsdrmvideo.c
+@@ -496,6 +496,19 @@ SDL_bool KMSDRM_WaitPageflip(_THIS, SDL_WindowData *windata)
+     return SDL_TRUE;
+ }
+ 
++/* Mode size as the app sees it: swapped when SDL_KMSDRM_ROTATE turns the
++   output by 90 or 270 degrees. The GBM surface keeps the real size. */
++static void KMSDRM_GetModeSize(const drmModeModeInfo *mode, int *w, int *h)
++{
++    if (KMSDRM_GLES_GetRotation()) {
++        *w = mode->vdisplay;
++        *h = mode->hdisplay;
++    } else {
++        *w = mode->hdisplay;
++        *h = mode->vdisplay;
++    }
++}
++
+ /* Given w, h and refresh rate, returns the closest DRM video mode
+    available on the DRM connector of the display.
+    We use the SDL mode list (which we filled in KMSDRM_GetDisplayModes)
+@@ -898,8 +911,7 @@ static void KMSDRM_AddDisplay(_THIS, drmModeConnector *connector, drmModeRes *re
+     modedata->mode_index = mode_index;
+ 
+     display.driverdata = dispdata;
+-    display.desktop_mode.w = dispdata->mode.hdisplay;
+-    display.desktop_mode.h = dispdata->mode.vdisplay;
++    KMSDRM_GetModeSize(&dispdata->mode, &display.desktop_mode.w, &display.desktop_mode.h);
+     display.desktop_mode.refresh_rate = dispdata->mode.vrefresh;
+     display.desktop_mode.format = SDL_PIXELFORMAT_ARGB8888;
+     display.desktop_mode.driverdata = modedata;
+@@ -1172,6 +1184,7 @@ static void KMSDRM_DirtySurfaces(SDL_Window *window)
+ {
+     SDL_WindowData *windata = (SDL_WindowData *)window->driverdata;
+     drmModeModeInfo mode;
++    int w, h;
+ 
+     /* Can't recreate EGL surfaces right now, need to wait until SwapWindow
+        so the correct thread-local surface and context state are available */
+@@ -1181,7 +1194,8 @@ static void KMSDRM_DirtySurfaces(SDL_Window *window)
+        or SetWindowFullscreen, send a fake event for now since the actual
+        recreation is deferred */
+     KMSDRM_GetModeToSet(window, &mode);
+-    SDL_SendWindowEvent(window, SDL_WINDOWEVENT_RESIZED, mode.hdisplay, mode.vdisplay);
++    KMSDRM_GetModeSize(&mode, &w, &h);
++    SDL_SendWindowEvent(window, SDL_WINDOWEVENT_RESIZED, w, h);
+ }
+ 
+ /* This determines the size of the fb, which comes from the GBM surface
+@@ -1216,8 +1230,7 @@ int KMSDRM_CreateSurfaces(_THIS, SDL_Window *window)
+        mode that's set in sync with what SDL_video.c thinks is set */
+     KMSDRM_GetModeToSet(window, &dispdata->mode);
+ 
+-    display->current_mode.w = dispdata->mode.hdisplay;
+-    display->current_mode.h = dispdata->mode.vdisplay;
++    KMSDRM_GetModeSize(&dispdata->mode, &display->current_mode.w, &display->current_mode.h);
+     display->current_mode.refresh_rate = dispdata->mode.vrefresh;
+     display->current_mode.format = SDL_PIXELFORMAT_ARGB8888;
+ 
+@@ -1246,7 +1259,7 @@ int KMSDRM_CreateSurfaces(_THIS, SDL_Window *window)
+     ret = SDL_EGL_MakeCurrent(_this, windata->egl_surface, egl_context);
+ 
+     SDL_SendWindowEvent(window, SDL_WINDOWEVENT_RESIZED,
+-                        dispdata->mode.hdisplay, dispdata->mode.vdisplay);
++                        display->current_mode.w, display->current_mode.h);
+ 
+     windata->egl_surface_dirty = SDL_FALSE;
+ 
+@@ -1363,8 +1376,7 @@ void KMSDRM_GetDisplayModes(_THIS, SDL_VideoDisplay *display)
+             modedata->mode_index = i;
+         }
+ 
+-        mode.w = conn->modes[i].hdisplay;
+-        mode.h = conn->modes[i].vdisplay;
++        KMSDRM_GetModeSize(&conn->modes[i], &mode.w, &mode.h);
+         mode.refresh_rate = conn->modes[i].vrefresh;
+         mode.format = SDL_PIXELFORMAT_ARGB8888;
+         mode.driverdata = modedata;

@@ -43,6 +43,7 @@ It is not a fork of Buildroot.
 | G11 | HDMI audio | Should |
 | G12 | Auto-run a specific cartridge on boot | Should |
 | G13 | Image ≤ 256 MB | Should |
+| G14 | Retroflag GPi Case (v1): its LCD (DPI on GPIO), speaker and pad, chosen by one `config.txt` line | Could |
 
 ## 3. Non-goals
 

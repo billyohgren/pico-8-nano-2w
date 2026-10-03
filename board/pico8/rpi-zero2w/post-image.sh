@@ -21,6 +21,9 @@ GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
 # on the card. Always overwrite at image time.
 cp "${BOARD_DIR}/cmdline.txt" "${BINARIES_DIR}/rpi-firmware/cmdline.txt"
 cp "${BOARD_DIR}/config.txt" "${BINARIES_DIR}/rpi-firmware/config.txt"
+# Screen choices that config.txt includes, and the GPi Case's own cmdline.
+cp "${BOARD_DIR}/hdmi.txt" "${BOARD_DIR}/gpicase.txt" \
+	"${BOARD_DIR}/cmdline-gpicase.txt" "${BINARIES_DIR}/rpi-firmware/"
 
 # The FAT partition is the one volume a non-technical user can mount on a Mac
 # or Windows machine, so the user-serviceable files live there (PRD 7, 7.1).
