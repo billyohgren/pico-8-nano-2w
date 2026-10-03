@@ -42,6 +42,10 @@ then:
 5. Drop carts into `pico-8/carts`.
 6. Boot with HDMI and a USB keyboard.
 
+In a Retroflag GPi Case (version 1)? Swap two lines in `config.txt` to use
+its LCD, speaker and pad instead of HDMI. This is untested; see
+[docs/flashing.md](docs/flashing.md#4c-retroflag-gpi-case-version-1-optional-untested).
+
 `sdcard.img` is still there for Raspberry Pi Imager; it is a 256 MB card
 image, not a limit. The zip is how a 32 GB card stays 32 GB.
 

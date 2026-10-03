@@ -15,8 +15,9 @@ BR2_TOOLCHAIN_EXTERNAL=y
 BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y
 BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_ARMV7_EABIHF_GLIBC_STABLE=y
 
-# Relative to the Buildroot tree, not this external tree.
-BR2_GLOBAL_PATCH_DIR="board/raspberrypi/patches"
+# The first is relative to the Buildroot tree. Ours carries the SDL2
+# KMSDRM rotation the GPi Case LCD needs (gpicase.txt).
+BR2_GLOBAL_PATCH_DIR="board/raspberrypi/patches $(BR2_EXTERNAL_PICO8_PATH)/board/pico8/patches"
 BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
 
 # vc4 and brcmfmac are modules, so something must handle uevents and load
@@ -47,7 +48,7 @@ BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
 BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL_PICO8_PATH)/board/pico8/rpi-zero2w/linux.fragment"
 
 # Raspberry Pi firmware. DTB overlays are needed for vc4-kms-v3d and
-# disable-bt, both referenced by our config.txt.
+# disable-bt (hdmi.txt), and vc4-kms-dpi-generic and audremap (gpicase.txt).
 # Cut-down start_cd.elf is the one we boot (gpu_mem=16); the default
 # start.elf stays on the card as a fallback if KMS or HDMI audio fails.
 BR2_PACKAGE_RPI_FIRMWARE=y

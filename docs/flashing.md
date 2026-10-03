@@ -135,6 +135,36 @@ You need the IP address for now: there is no mDNS yet, so `pico8.local` will
 not resolve. Check your router's client list, or read it from the serial
 console.
 
+## 4c. Retroflag GPi Case, version 1 (optional, untested)
+
+The image can drive the case's own LCD, speaker and buttons instead of
+HDMI. Open `config.txt` on PICO8BOOT and swap which line has the `#`:
+
+```
+#include hdmi.txt
+include gpicase.txt
+```
+
+What changes in that mode:
+
+- **Screen.** The LCD is on the GPIO header. Its panel is really 240x320
+  portrait, and KMS cannot turn it, so our SDL2 build turns the picture
+  instead. PICO-8 fills the 240-line height.
+- **Sound** comes from the case speaker (PWM on GPIO 18/19).
+- **Buttons.** The built-in pad is an Xbox 360-style USB pad and needs no
+  setup. If the D-pad does nothing, hold Select (or Start on newer cases)
+  and press Up to switch it to hat mode.
+- **No serial console.** GPIO 14/15 carry pixel data. Use
+  `pico8-launch.log` on PICO8BOOT instead.
+- The case's safe-shutdown switch is not wired up. The OS runs from RAM,
+  so cutting power is safe for the OS; only a save in progress can be lost.
+
+Nobody has run this on a case yet. The panel timings come from Retroflag's
+old firmware settings. If the picture is upside down, change `rotate=90` to
+`rotate=270` in `gpicase.txt`. If colours are swapped, change `rgb666-padhi`
+to `bgr666-padhi`. If it rolls or tears, delete `,hsync-invert,vsync-invert`.
+Then send the `pico8-launch.log` from PICO8BOOT along with what you saw.
+
 ## 5. Boot
 
 Eject the card, put it in the Pi, connect HDMI and a USB keyboard, power on.

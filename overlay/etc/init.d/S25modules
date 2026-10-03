@@ -18,6 +18,20 @@ case "$1" in
 		modprobe snd-soc-core 2>/dev/null
 		modprobe snd-pcm-dmaengine 2>/dev/null
 		modprobe snd-soc-hdmi-codec 2>/dev/null
+
+		# GPi Case (gpicase.txt adds a panel-dpi node). Gated, because
+		# snd-bcm2835 binds on any Zero 2 W and would put a silent
+		# "Headphones" card next to HDMI audio.
+		if grep -qs panel-dpi /proc/device-tree/panel/compatible; then
+			# vc4 cannot finish binding until the panel has.
+			modprobe panel-simple 2>/dev/null
+			# Speaker: firmware PWM audio on GPIO 18/19.
+			modprobe snd-bcm2835 2>/dev/null
+			# The built-in pad is an Xbox 360 pad (045e:028e), and it is
+			# on the bus before mdev can catch the hotplug event.
+			modprobe xpad 2>/dev/null
+		fi
+
 		modprobe vc4 2>/dev/null
 
 		# Wi-Fi. The Zero 2 W has no Ethernet.

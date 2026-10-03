@@ -31,6 +31,8 @@ dump_state() {
 	log "uptime=$(cut -d' ' -f1 /proc/uptime 2>/dev/null) cmdline=$(cat /proc/cmdline 2>/dev/null)"
 	log "mem: $(awk '/MemAvailable|MemFree|CmaTotal|CmaFree/ {printf "%s=%s ", $1, $2}' /proc/meminfo 2>/dev/null)"
 	log "dri=$(ls /dev/dri 2>/dev/null | tr '\n' ' ')"
+	log "connectors: $(for c in /sys/class/drm/card*-*/status; do [ -e "$c" ] && printf '%s=%s ' "$(basename "$(dirname "$c")")" "$(cat "$c")"; done)"
+	log "sound: $(cat /proc/asound/cards 2>/dev/null | sed -n 's/^ *\([0-9]\) \[\([^ ]*\).*/\1:\2/p' | tr '\n' ' ')"
 	if [ -d "${BOOT}" ]; then
 		echo "----- dmesg -----" >> "${LOGFILE}" 2>/dev/null
 		dmesg >> "${LOGFILE}" 2>/dev/null
@@ -126,7 +128,23 @@ fi
 set -- -home "${PICO_HOME}" -root_path "${PICO_HOME}/carts"
 [ "$MODE" = splore ] && set -- "$@" -splore
 
-log "starting ${BIN} (mode=${MODE}) argv: $*"
+# GPi Case (gpicase.txt adds a panel-dpi node).
+#
+# The LCD scans out 240x320 portrait. Our SDL2 patch turns the picture by
+# the overlay's rotate= (a big-endian u32 in the device tree), so PICO-8
+# sees 320x240. That is only 240 lines: PICO-8's default integer scaling
+# gives 1x (128x128), so stretch to 240 instead.
+#
+# The speaker is the firmware PWM card; vc4 still registers an HDMI card,
+# and SDL opens card 0 unless told.
+if grep -qs panel-dpi /proc/device-tree/panel/compatible; then
+	rot=$(od -An -tx1 /proc/device-tree/panel/rotation 2>/dev/null | tr -d ' \n')
+	[ -n "$rot" ] && export SDL_KMSDRM_ROTATE=$((0x$rot))
+	set -- "$@" -pixel_perfect 0
+	export AUDIODEV=plughw:CARD=Headphones,DEV=0
+fi
+
+log "starting ${BIN} (mode=${MODE}) AUDIODEV=${AUDIODEV:-} SDL_KMSDRM_ROTATE=${SDL_KMSDRM_ROTATE:-} argv: $*"
 dump_state
 
 # Do not exec: when PICO-8 exits we still want dmesg on the card.
