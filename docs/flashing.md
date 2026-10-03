@@ -162,8 +162,8 @@ What changes in that mode:
 Nobody has run this on a case yet. The panel timings come from Retroflag's
 old firmware settings. If the picture is upside down, change `rotate=90` to
 `rotate=270` in `gpicase.txt`. If colours are swapped, change `rgb666-padhi`
-to `bgr666-padhi`. If it rolls or tears, delete `,hsync-invert,vsync-invert`.
-Then send the `pico8-launch.log` from PICO8BOOT along with what you saw.
+to `bgr666-padhi`. If it rolls or tears, delete the
+`dtparam=hsync-invert,vsync-invert` line. Then send the `pico8-launch.log` from PICO8BOOT along with what you saw.
 
 ## 5. Boot
 

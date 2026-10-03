@@ -6,8 +6,8 @@
 #   dpi_output_format=0x6016  (18-bit 666, mode 6 / "CFG2")
 #   dpi_timings=240 1 38 10 20 320 1 20 4 4 0 0 0 60 0 6400000 1
 # If colours are wrong try bgr666-padhi; if the picture rolls or tears,
-# drop hsync-invert,vsync-invert. If it is upside down, change rotate=90
-# to rotate=270.
+# delete the hsync-invert,vsync-invert line. If it is upside down, change
+# rotate=90 to rotate=270.
 #
 # The panel scans as 240x320 portrait. Legacy firmware rotated it with
 # display_lcd_rotate; vc4 KMS can only do 0 or 180. Instead pico8-launch
@@ -21,7 +21,17 @@ dtoverlay=vc4-kms-v3d,cma-128
 # The LCD. rgb666-padhi uses GPIO 0-9, 12-17 and 20-25, leaving 18/19 for
 # audio and 26/27 for the case's power switch. 14/15 are pixel data, so
 # there is no serial console here: no disable-bt, no enable_uart.
-dtoverlay=vc4-kms-dpi-generic,hactive=240,hfp=38,hsync=10,hbp=20,vactive=320,vfp=20,vsync=4,vbp=4,clock-frequency=6400000,rgb666-padhi,hsync-invert,vsync-invert,rotate=90
+#
+# config.txt lines stop at 98 characters, so the parameters go on dtparam
+# lines (they apply to the overlay just above). One long dtoverlay= line
+# loses everything past the cut, and the default pin set then grabs 18/19.
+dtoverlay=vc4-kms-dpi-generic
+dtparam=hactive=240,hfp=38,hsync=10,hbp=20
+dtparam=vactive=320,vfp=20,vsync=4,vbp=4
+dtparam=clock-frequency=6400000
+dtparam=rgb666-padhi
+dtparam=hsync-invert,vsync-invert
+dtparam=rotate=90
 
 # Speaker: firmware PWM audio (snd_bcm2835 "Headphones") moved to GPIO
 # 18/19. The speaker is mono on the right channel; PICO-8 is mono anyway.

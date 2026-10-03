@@ -40,6 +40,17 @@ dump_state() {
 	fi
 }
 
+# Text on the screen (tty1, fbcon on vc4) so a blank screen never means
+# "did it even boot?". Lines stay under 40 columns: the GPi panel is 320
+# pixels wide, 8 px per character. vc4 tells fbcon the panel's rotation,
+# so this is upright there too. Unreadable before vc4 is up, harmless after.
+say() {
+	{
+		printf '\033[2J\033[H\n'
+		for l in "$@"; do printf ' %s\n' "$l"; done
+	} > /dev/tty1 2>/dev/null
+}
+
 # Rotate before a respawn loop fills the 128 MB volume.
 if [ -f "${LOGFILE}" ]; then
 	sz=$(wc -c < "${LOGFILE}" 2>/dev/null | tr -d ' ')
@@ -51,6 +62,23 @@ fi
 log "---- boot ----"
 dump_state
 
+# Wait for KMS. usleep is 0.1 s; plain sleep 1 is the fallback if the
+# applet is missing. Do not start PICO-8 without a DRM node: Mesa then
+# aborts and BusyBox respawn turns that into a crash loop.
+n=0
+while [ ! -e /dev/dri/card0 ] && [ "$n" -lt 50 ]; do
+	usleep 100000 2>/dev/null || sleep 1
+	n=$((n + 1))
+done
+if [ ! -e /dev/dri/card0 ]; then
+	log "no /dev/dri/card0 (vc4 did not come up). not starting PICO-8."
+	dump_state
+	sleep 10
+	exit 1
+fi
+
+say "PICO-8 nano 2W" "" "Starting..."
+
 # The folder may be called pico-8 (as shipped in Lexaloffle's zip) or pico8.
 PICO_DIR=""
 for d in "${BOOT}/pico-8" "${BOOT}/pico8"; do
@@ -61,6 +89,7 @@ if [ -z "${PICO_DIR}" ]; then
 	log "no PICO-8 found on the boot partition."
 	log "Plug the card into a computer, open the PICO8BOOT volume and copy"
 	log "the 'pico-8' folder from your Lexaloffle raspi zip onto it."
+	say "PICO-8 nano 2W" "" "No pico-8 folder on the card." "" "Copy the pico-8 folder from" "Lexaloffle's Raspberry Pi zip" "onto the PICO8BOOT volume."
 	sleep 10
 	exit 1
 fi
@@ -79,8 +108,10 @@ if [ -z "${BIN}" ]; then
 	if [ -f "${PICO_DIR}/pico8_64" ]; then
 		log "found only pico8_64, which is 64-bit. This image runs a 32-bit"
 		log "userland -- you need pico8_dyn from the same zip."
+		say "PICO-8 nano 2W" "" "Only pico8_64 found. This needs" "pico8_dyn from the same zip."
 	else
 		log "${PICO_DIR} contains no PICO-8 binary (looked for pico8_dyn, pico8)."
+		say "PICO-8 nano 2W" "" "No pico8_dyn in the pico-8" "folder on the card."
 	fi
 	sleep 10
 	exit 1
@@ -110,21 +141,6 @@ esac
 export SDL_VIDEODRIVER=kmsdrm
 export HOME="${BOOT}"
 
-# Wait for KMS. usleep is 0.1 s; plain sleep 1 is the fallback if the
-# applet is missing. Do not start PICO-8 without a DRM node: Mesa then
-# aborts and BusyBox respawn turns that into a crash loop.
-n=0
-while [ ! -e /dev/dri/card0 ] && [ "$n" -lt 50 ]; do
-	usleep 100000 2>/dev/null || sleep 1
-	n=$((n + 1))
-done
-if [ ! -e /dev/dri/card0 ]; then
-	log "no /dev/dri/card0 (vc4 did not come up). not starting PICO-8."
-	dump_state
-	sleep 10
-	exit 1
-fi
-
 set -- -home "${PICO_HOME}" -root_path "${PICO_HOME}/carts"
 [ "$MODE" = splore ] && set -- "$@" -splore
 
@@ -144,6 +160,7 @@ if grep -qs panel-dpi /proc/device-tree/panel/compatible; then
 	export AUDIODEV=plughw:CARD=Headphones,DEV=0
 fi
 
+say "PICO-8 nano 2W" "" "Starting $(basename "${BIN}")..."
 log "starting ${BIN} (mode=${MODE}) AUDIODEV=${AUDIODEV:-} SDL_KMSDRM_ROTATE=${SDL_KMSDRM_ROTATE:-} argv: $*"
 dump_state
 
@@ -165,6 +182,7 @@ kill "${SYNCPID}" 2>/dev/null
 wait "${SYNCPID}" 2>/dev/null
 
 log "PICO-8 exited rc=${rc}"
+say "PICO-8 nano 2W" "" "PICO-8 stopped (code ${rc})." "Restarting..."
 dump_state
 sleep 2
 exit "${rc}"
